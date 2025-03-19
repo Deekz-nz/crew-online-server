@@ -4,86 +4,132 @@
 // File: src/rooms/CrewRoom.ts
 import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
+import { CrewGameState } from "./schema/CrewRoomState";
+import { Card, CardColor, GameStage, Player } from "./schema/CrewTypes";
 
-// === Define Card ===
-class Card extends Schema {
-  @type("string") color!: string; // "yellow" | "green" | "pink" | "blue"
-  @type("number") number!: number; // 1 - 9
+
+interface JoinOptions {
+  displayName: string;
 }
 
-// === Define Player ===
-class Player extends Schema {
-  @type("string") sessionId!: string;
-  @type([Card]) hand = new ArraySchema<Card>();
-  @type("boolean") isMyTurn: boolean = false;
-}
-
-// === Define Room State ===
-class GameState extends Schema {
-  @type({ map: Player }) players = new MapSchema<Player>();
-  @type("string") currentTurnSessionId: string = "";
-  @type([Card]) playedCards = new ArraySchema<Card>();
-}
-
-export class CrewRoom extends Room<GameState> {
-  maxClients = 2;
+export class CrewRoom extends Room<CrewGameState> {
+  maxClients = 5;
 
   onCreate(options: any) {
-    this.state = new GameState();
+    this.state = new CrewGameState();
+
+    this.onMessage("start_game", (client) => {
+      const player = this.state.players.get(client.sessionId);
+      
+      // Check current game stage is "not started"
+      if (this.state.currentGameStage != GameStage.NotStarted) return;
+
+      // Check there is at least 3 players registered
+      if (this.state.players.size <= 2) return;
+
+      // Start the game
+
+    })
 
     this.onMessage("play_card", (client, cardData: { color: string; number: number }) => {
       const player = this.state.players.get(client.sessionId);
-      if (!player || this.state.currentTurnSessionId !== client.sessionId) return;
+      // Check that it is actually this person's turn
+      if (!player || this.state.currentPlayer !== client.sessionId) return;
 
-      // Find and remove the card from player's hand
-      const cardIndex = player.hand.findIndex(
-        (card) => card.color === cardData.color && card.number === cardData.number
-      );
-      if (cardIndex === -1) return; // Card not found
+      // // Find and remove the card from player's hand
+      // const cardIndex = player.hand.findIndex(
+      //   (card) => card.color === cardData.color && card.number === cardData.number
+      // );
+      // if (cardIndex === -1) return; // Card not found
 
-      const [playedCard] = player.hand.splice(cardIndex, 1);
-      this.state.playedCards.push(playedCard);
+      // const [playedCard] = player.hand.splice(cardIndex, 1);
+      // this.state.playedCards.push(playedCard);
 
-      // Switch turn to other player
-      const otherPlayerId = Array.from(this.state.players.keys()).find(
-        (id) => id !== client.sessionId
-      );
-      if (otherPlayerId) {
-        player.isMyTurn = false;
-        this.state.players.get(otherPlayerId)!.isMyTurn = true;
-        this.state.currentTurnSessionId = otherPlayerId;
-      }
+      // // Switch turn to other player
+      // const otherPlayerId = Array.from(this.state.players.keys()).find(
+      //   (id) => id !== client.sessionId
+      // );
+      // if (otherPlayerId) {
+      //   player.isMyTurn = false;
+      //   this.state.players.get(otherPlayerId)!.isMyTurn = true;
+      //   this.state.currentTurnSessionId = otherPlayerId;
+      // }
     });
   }
 
-  onJoin(client: Client, options: any) {
+  onJoin(client: Client, options: JoinOptions) {
     const player = new Player();
     player.sessionId = client.sessionId;
-    player.hand = new ArraySchema<Card>(...this.generateHand());
+
+    // Get current player count for a fallback display name
+    const playerCount = this.state.players.size + 1;
+    player.displayName = options.displayName || "Player " + playerCount.toString();
 
     this.state.players.set(client.sessionId, player);
-
-    // If two players are connected, start the game
-    if (this.clients.length === 2) {
-      const firstPlayerId = this.clients[0].sessionId;
-      this.state.currentTurnSessionId = firstPlayerId;
-      this.state.players.get(firstPlayerId)!.isMyTurn = true;
-    }
+    this.state.playerOrder.push(client.sessionId);
   }
 
   onLeave(client: Client, consented: boolean) {
     this.state.players.delete(client.sessionId);
+    this.state.players.delete(client.sessionId);
   }
 
-  generateHand(): Card[] {
-    const colors = ["yellow", "green", "pink", "blue"];
-    const hand: Card[] = [];
-    while (hand.length < 10) {
-      const card = new Card();
-      card.color = colors[Math.floor(Math.random() * colors.length)];
-      card.number = Math.floor(Math.random() * 9) + 1;
-      hand.push(card);
+  startGame() {
+    this.state.currentGameStage = GameStage.GameSetup;
+
+    // Create and shuffle the deck
+    const deck = this.generateDeck();
+    this.shuffle(deck);
+
+    // Deal cards evenly
+    const playerIds = Array.from(this.state.players.keys());
+    while (deck.length) {
+      for (const id of playerIds) {
+        if (deck.length === 0) break;
+        this.state.players.get(id)!.hand.push(deck.pop()!);
+      }
     }
-    return hand;
+
+    // Determine who has black 4
+    const starterId = playerIds.find(id =>
+      this.state.players.get(id)!.hand.some(card => card.color === CardColor.Black && card.number === 4)
+    );
+
+    if (starterId) {
+      this.state.currentPlayer = starterId;
+    } else {
+      console.log("Uh oh, can't find the Black 4 in anyone's hand??!");
+    }
+
+    this.state.currentGameStage = GameStage.TrickStart;
+  }
+
+  generateDeck(): Card[] {
+    const colors = [CardColor.Yellow, CardColor.Green, CardColor.Pink, CardColor.Blue];
+    const deck: Card[] = [];
+
+    for (const color of colors) {
+      for (let num = 1; num <= 9; num++) {
+        const card = new Card();
+        card.color = color;
+        card.number = num;
+        deck.push(card);
+      }
+    }
+    for (let num = 1; num <= 4; num++) {
+      const card = new Card();
+      card.color = CardColor.Black;
+      card.number = num;
+      deck.push(card);
+    }
+
+    return deck;
+  }
+
+  shuffle(array: Card[]) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
   }
 }
