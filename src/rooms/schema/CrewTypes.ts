@@ -1,6 +1,5 @@
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 
-
 // === Enums and Types ===
 export enum CardColor {
   Yellow = "yellow",

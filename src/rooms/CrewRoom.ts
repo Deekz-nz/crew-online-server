@@ -5,7 +5,7 @@
 import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 import { CrewGameState } from "./schema/CrewRoomState";
-import { Card, CardColor, GameStage, Player } from "./schema/CrewTypes";
+import { Card, CardColor, GameStage, Player, Trick } from "./schema/CrewTypes";
 
 
 interface JoinOptions {
@@ -18,6 +18,7 @@ export class CrewRoom extends Room<CrewGameState> {
   onCreate(options: any) {
     this.state = new CrewGameState();
 
+    // GameStage = NotStarted
     this.onMessage("start_game", (client) => {
       const player = this.state.players.get(client.sessionId);
       
@@ -28,33 +29,126 @@ export class CrewRoom extends Room<CrewGameState> {
       if (this.state.players.size <= 2) return;
 
       // Start the game
+      this.startGame();
 
     })
 
+    // GameStage = TrickStart or TrickMiddle
     this.onMessage("play_card", (client, cardData: { color: string; number: number }) => {
       const player = this.state.players.get(client.sessionId);
+      // Check GameStage
+      if (this.state.currentGameStage !== GameStage.TrickStart && this.state.currentGameStage !== GameStage.TrickMiddle) return;
+
       // Check that it is actually this person's turn
       if (!player || this.state.currentPlayer !== client.sessionId) return;
 
-      // // Find and remove the card from player's hand
-      // const cardIndex = player.hand.findIndex(
-      //   (card) => card.color === cardData.color && card.number === cardData.number
-      // );
-      // if (cardIndex === -1) return; // Card not found
+      // Find and remove the card from player's hand
+      const cardIndex = player.hand.findIndex(
+        (card) => card.color === cardData.color && card.number === cardData.number
+      );
+      if (cardIndex === -1) return; // Card not found
 
-      // const [playedCard] = player.hand.splice(cardIndex, 1);
-      // this.state.playedCards.push(playedCard);
+      // Remove card from player's hand
+      const [playedCard] = player.hand.splice(cardIndex, 1);
 
-      // // Switch turn to other player
-      // const otherPlayerId = Array.from(this.state.players.keys()).find(
-      //   (id) => id !== client.sessionId
-      // );
-      // if (otherPlayerId) {
-      //   player.isMyTurn = false;
-      //   this.state.players.get(otherPlayerId)!.isMyTurn = true;
-      //   this.state.currentTurnSessionId = otherPlayerId;
-      // }
+      const trick = this.state.currentTrick;
+
+      if (this.state.currentGameStage === GameStage.TrickStart) {
+        // === First card of the trick ===
+        // Update state
+        const newTrick = new Trick();
+        newTrick.playedCards.push(playedCard);
+        newTrick.playerOrder.push(client.sessionId);
+        newTrick.trickCompleted = false;
+        this.state.currentTrick = newTrick;
+    
+        // Advance game stage to TrickMiddle
+        this.state.currentGameStage = GameStage.TrickMiddle;
+        this.state.currentPlayer = this.getNextPlayer(client.sessionId);
+      } else if (this.state.currentGameStage === GameStage.TrickMiddle) {
+        // It's NOT the first card, so we have to make sure the player isn't re-negging
+        // i.e. if the first card in the trick was a blue, and the player is NOT playing a blue, then check to make sure they have no blues
+        const leadCard = trick.playedCards[0];
+
+        if (playedCard.color !== leadCard.color) {
+          const hasLeadColor = player.hand.some((card) => card.color === leadCard.color);
+          if (hasLeadColor) {
+            // Player is re-negging — revert card removal and ignore play
+            player.hand.push(playedCard); // Add card back to hand
+            return;
+          }
+        }
+        // Add played card to trick
+        trick.playedCards.push(playedCard);
+        trick.playerOrder.push(client.sessionId);
+
+        // Now check - is trick finished?
+        if (trick.playedCards.length === this.state.playerOrder.length) {
+          const winnerId = this.determineTrickWinner(trick);
+          trick.trickWinner = winnerId;
+          trick.trickCompleted = true;
+          this.state.currentPlayer = winnerId;
+          this.state.currentGameStage = GameStage.TrickEnd;
+          this.state.completedTricks.push(trick);
+        } else {
+          // Trick still going - move to next player
+          this.state.currentPlayer = this.getNextPlayer(client.sessionId);
+        }
+      } else {
+        // Invalid game stage - put card back
+        player.hand.push(playedCard); // Add card back to hand
+        return;
+      }
+
     });
+
+    // GameStage = TrickEnd
+    this.onMessage("finish_trick", (client) => {
+      const player = this.state.players.get(client.sessionId);
+      
+      // Check current game stage is "TrickEnd"
+      if (this.state.currentGameStage != GameStage.TrickEnd) return;
+
+      // Check that it is actually this person's turn
+      if (!player || this.state.currentPlayer !== client.sessionId) return;
+
+      // Determine how many tricks are expected based on number of players
+      const numPlayers = this.state.playerOrder.length;
+      let totalTricksExpected = 0;
+
+      switch (numPlayers) {
+        case 5: totalTricksExpected = 8; break;
+        case 4: totalTricksExpected = 10; break;
+        case 3: totalTricksExpected = 13; break;
+        default: return; // Invalid player count
+      }
+      
+      const tricksPlayed = this.state.completedTricks.length;
+
+      if (tricksPlayed >= totalTricksExpected) {
+        // All tricks played: count how many each player won
+        const trickWins = new Map<string, number>(); // sessionId -> win count
+    
+        for (const trick of this.state.completedTricks) {
+          const winnerId = trick.trickWinner;
+          if (winnerId) {
+            trickWins.set(winnerId, (trickWins.get(winnerId) || 0) + 1);
+          }
+        }
+    
+        // For now, just console log
+        console.log("Trick wins per player:", Array.from(trickWins.entries()));
+    
+        this.state.currentGameStage = GameStage.GameEnd;
+        this.state.currentTrick = new Trick();
+    
+      } else {
+        // More tricks to play: reset for next trick
+        this.state.currentTrick = new Trick();
+        this.state.currentGameStage = GameStage.TrickStart;
+        // currentPlayer remains unchanged (winner of last trick leads next)
+      }
+    })
   }
 
   onJoin(client: Client, options: JoinOptions) {
@@ -71,7 +165,8 @@ export class CrewRoom extends Room<CrewGameState> {
 
   onLeave(client: Client, consented: boolean) {
     this.state.players.delete(client.sessionId);
-    this.state.players.delete(client.sessionId);
+    const index = this.state.playerOrder.indexOf(client.sessionId);
+    if (index !== -1) this.state.playerOrder.splice(index, 1);
   }
 
   startGame() {
@@ -83,11 +178,16 @@ export class CrewRoom extends Room<CrewGameState> {
 
     // Deal cards evenly
     const playerIds = Array.from(this.state.players.keys());
+  
+    // Randomize starting index
+    const startIndex = Math.floor(Math.random() * playerIds.length);
+
+    // Deal cards starting from random player
+    let dealIndex = startIndex;
     while (deck.length) {
-      for (const id of playerIds) {
-        if (deck.length === 0) break;
-        this.state.players.get(id)!.hand.push(deck.pop()!);
-      }
+      const playerId = playerIds[dealIndex % playerIds.length];
+      this.state.players.get(playerId)!.hand.push(deck.pop()!);
+      dealIndex++;
     }
 
     // Determine who has black 4
@@ -131,5 +231,47 @@ export class CrewRoom extends Room<CrewGameState> {
       const j = Math.floor(Math.random() * (i + 1));
       [array[i], array[j]] = [array[j], array[i]];
     }
+  }
+
+  getNextPlayer(currentPlayer: string) {
+    const currentIndex = this.state.playerOrder.indexOf(currentPlayer);
+    const nextIndex = (currentIndex + 1) % this.state.playerOrder.length;
+    return this.state.playerOrder[nextIndex];
+  }
+
+  determineTrickWinner(trick: Trick) {
+    const playedCards = trick.playedCards;
+    const playerOrder = trick.playerOrder;
+  
+    let winningIndex = 0;
+    let highestValue = -1;
+  
+    // First, check for any black cards
+    let blackCardPlayed = false;
+  
+    playedCards.forEach((card, idx) => {
+      if (card.color === CardColor.Black) {
+        blackCardPlayed = true;
+        if (card.number > highestValue) {
+          highestValue = card.number;
+          winningIndex = idx;
+        }
+      }
+    });
+  
+    if (!blackCardPlayed) {
+      // No black cards, determine winner by lead suit
+      const leadColor = playedCards[0].color;
+      highestValue = -1;
+  
+      playedCards.forEach((card, idx) => {
+        if (card.color === leadColor && card.number > highestValue) {
+          highestValue = card.number;
+          winningIndex = idx;
+        }
+      });
+    }
+  
+    return playerOrder[winningIndex]; // Return the sessionId of the winning player
   }
 }
