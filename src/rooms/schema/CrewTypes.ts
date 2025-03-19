@@ -18,6 +18,13 @@ export enum GameStage {
   GameEnd = "game_end"
 }
 
+export enum CommunicationRank {
+  Highest = "highest",
+  Lowest = "lowest",
+  Only = "only",
+  Unknown = "unknown"
+}
+
 // === Define Card ===
 export class Card extends Schema {
   @type("string") color!: CardColor; // "yellow" | "green" | "pink" | "blue"
@@ -29,6 +36,10 @@ export class Player extends Schema {
   @type("string") sessionId!: string;
   @type([Card]) hand = new ArraySchema<Card>();
   @type("string") displayName: string;
+
+  @type("boolean") hasCommunicated: boolean = false;
+  @type(Card) communicationCard: Card;
+  @type("string") communicationRank: CommunicationRank;
 }
 
 // === Define Trick ===

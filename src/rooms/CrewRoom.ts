@@ -5,7 +5,7 @@
 import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 import { CrewGameState } from "./schema/CrewRoomState";
-import { Card, CardColor, GameStage, Player, Trick } from "./schema/CrewTypes";
+import { Card, CardColor, CommunicationRank, GameStage, Player, Trick } from "./schema/CrewTypes";
 
 
 interface JoinOptions {
@@ -34,7 +34,7 @@ export class CrewRoom extends Room<CrewGameState> {
     })
 
     // GameStage = TrickStart or TrickMiddle
-    this.onMessage("play_card", (client, cardData: { color: string; number: number }) => {
+    this.onMessage("play_card", (client, cardData: { color: CardColor; number: number }) => {
       const player = this.state.players.get(client.sessionId);
       // Check GameStage
       if (this.state.currentGameStage !== GameStage.TrickStart && this.state.currentGameStage !== GameStage.TrickMiddle) return;
@@ -50,6 +50,18 @@ export class CrewRoom extends Room<CrewGameState> {
 
       // Remove card from player's hand
       const [playedCard] = player.hand.splice(cardIndex, 1);
+
+        // Check if this card was communicated — track whether we cleared it in case we revert
+      let communicationCleared = false;
+      if (
+        player.hasCommunicated &&
+        player.communicationCard.color === playedCard.color &&
+        player.communicationCard.number === playedCard.number
+      ) {
+        player.communicationCard = new Card(); // Reset to empty card
+        player.communicationRank = CommunicationRank.Unknown;
+        communicationCleared = true;
+      }
 
       const trick = this.state.currentTrick;
 
@@ -75,6 +87,10 @@ export class CrewRoom extends Room<CrewGameState> {
           if (hasLeadColor) {
             // Player is re-negging — revert card removal and ignore play
             player.hand.push(playedCard); // Add card back to hand
+            if (communicationCleared) { // Restore communication
+              player.hasCommunicated = true;
+              player.communicationCard = playedCard;
+            }
             return;
           }
         }
@@ -97,6 +113,10 @@ export class CrewRoom extends Room<CrewGameState> {
       } else {
         // Invalid game stage - put card back
         player.hand.push(playedCard); // Add card back to hand
+        if (communicationCleared) { // Restore communication
+          player.hasCommunicated = true;
+          player.communicationCard = playedCard;
+        }
         return;
       }
 
@@ -148,7 +168,30 @@ export class CrewRoom extends Room<CrewGameState> {
         this.state.currentGameStage = GameStage.TrickStart;
         // currentPlayer remains unchanged (winner of last trick leads next)
       }
+    });
+
+    //GameStage = TrickEnd or TrickStart
+    this.onMessage("communicate", (client, details: { card: Card, cardRank: CommunicationRank }) => {
+      const player = this.state.players.get(client.sessionId);
+      // Check GameStage
+      if (this.state.currentGameStage !== GameStage.TrickStart && this.state.currentGameStage !== GameStage.TrickEnd) return;
+      
+      // Check if Player has already communicated
+      if (player.hasCommunicated) return;
+
+      // Check if communication is valid
+      if (!this.isValidCommunication(player, details.card, details.cardRank)) {
+        return;
+      }
+      
+      // Update player's communication
+      player.hasCommunicated = true;
+      player.communicationCard = details.card;
+      player.communicationRank = details.cardRank;
+      
+
     })
+
   }
 
   onJoin(client: Client, options: JoinOptions) {
@@ -274,5 +317,51 @@ export class CrewRoom extends Room<CrewGameState> {
     }
   
     return playerOrder[winningIndex]; // Return the sessionId of the winning player
+  }
+
+  // Check the communication rank, and whether this is a valid communicate (also check they have the card they're trying to communicate)
+  // - Highest iff they have more than one of that colour and this is the highest number
+  // - Lowest iff they have more than one of that colour and this is the lowest number
+  // - Only iff they have only one of that colour
+  // - Unknown is allowed iff exactly one of the above is true
+  isValidCommunication(
+    player: Player,
+    card: Card,
+    rank: CommunicationRank
+  ): boolean {
+    // Find all cards in player's hand of the same color
+    const sameColorCards = player.hand.filter((c) => c.color === card.color);
+  
+    if (sameColorCards.length === 0) return false; // Player doesn't have any card of that color
+    const numbers = sameColorCards.map((c) => c.number);
+    const maxNumber = Math.max(...numbers);
+    const minNumber = Math.min(...numbers);
+  
+    // Confirm player actually has the communicated card
+    const hasCard = sameColorCards.some(
+      (c) => c.number === card.number
+    );
+    if (!hasCard) return false;
+  
+    switch (rank) {
+      case CommunicationRank.Only:
+        return sameColorCards.length === 1;
+  
+      case CommunicationRank.Highest:
+        return sameColorCards.length > 1 && card.number === maxNumber;
+  
+      case CommunicationRank.Lowest:
+        return sameColorCards.length > 1 && card.number === minNumber;
+  
+      case CommunicationRank.Unknown:
+        const isHighest = card.number === maxNumber && sameColorCards.length > 1;
+        const isLowest = card.number === minNumber && sameColorCards.length > 1;
+        const isOnly = sameColorCards.length === 1;
+        const validRanks = [isHighest, isLowest, isOnly].filter((v) => v);
+        return validRanks.length === 1; // Exactly one condition is true
+  
+      default:
+        return false;
+    }
   }
 }
