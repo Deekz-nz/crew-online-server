@@ -44,6 +44,49 @@ export class CrewRoom extends Room<CrewGameState> {
     })
 
     // GameStage = GameSetup
+    this.onMessage("take_task", (client, taskData: SimpleTask) => {
+      if (this.state.currentGameStage !== GameStage.GameSetup) return;
+    
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+    
+      // Find task in availableTasks
+      const taskIndex = this.state.availableTasks.findIndex(task =>
+        this.isSameTask(task, taskData)
+      );
+      if (taskIndex === -1) return; // Task not found
+    
+      const [task] = this.state.availableTasks.splice(taskIndex, 1);
+      task.player = client.sessionId; // Assign task to player
+      player.hasTasks.push(task);
+    });
+
+    // GameStage = GameSetup
+    this.onMessage("return_task", (client, taskData: SimpleTask) => {
+      if (this.state.currentGameStage !== GameStage.GameSetup) return;
+    
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+    
+      // Find task in player's tasks
+      const taskIndex = player.hasTasks.findIndex(task =>
+        this.isSameTask(task, taskData)
+      );
+      if (taskIndex === -1) return; // Task not found
+    
+      const [task] = player.hasTasks.splice(taskIndex, 1);
+      task.player = ""; // Reset player assignment
+      this.state.availableTasks.push(task);
+    });
+
+    // GameStage = GameSetup
+    this.onMessage("finish_task_allocation", (client) => {
+      if (this.state.currentGameStage !== GameStage.GameSetup) return;
+    
+      if (this.state.availableTasks.length > 0) return; // Not all tasks taken
+    
+      this.state.currentGameStage = GameStage.TrickStart;
+    });
 
     // GameStage = TrickStart or TrickMiddle
     this.onMessage("play_card", (client, cardData: { color: CardColor; number: number }) => {
@@ -254,6 +297,7 @@ export class CrewRoom extends Room<CrewGameState> {
 
     if (starterId) {
       this.state.currentPlayer = starterId;
+      this.state.commanderPlayer = starterId;
     } else {
       console.log("Uh oh, can't find the Black 4 in anyone's hand??!");
     }
@@ -365,6 +409,16 @@ export class CrewRoom extends Room<CrewGameState> {
     }
   
     return taskList;
+  }
+
+  isSameTask(taskA: SimpleTask, taskB: SimpleTask): boolean {
+    return (
+      taskA.card.color === taskB.card.color &&
+      taskA.card.number === taskB.card.number &&
+      taskA.taskNumber === taskB.taskNumber &&
+      taskA.sequence === taskB.sequence &&
+      taskA.mustBeLast === taskB.mustBeLast
+    );
   }
   
   shuffle(array: Card[]) {

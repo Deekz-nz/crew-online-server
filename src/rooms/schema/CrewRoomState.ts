@@ -9,6 +9,7 @@ export class CrewGameState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type(["string"]) playerOrder = new ArraySchema<string>();
   @type("string") currentPlayer: string = "";
+  @type("string") commanderPlayer: string = "";
   
   @type(Trick) currentTrick: Trick;
   @type([Trick]) completedTricks = new ArraySchema<Trick>();
