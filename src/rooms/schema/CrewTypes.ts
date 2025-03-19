@@ -31,6 +31,15 @@ export class Card extends Schema {
   @type("number") number!: number; // 1 - 9
 }
 
+// === Define Task ===
+export class SimpleTask extends Schema {
+  @type(Card) card: Card;
+  @type("string") player: string;
+  @type("number") taskNumber: number;
+  @type("number") sequence: number;
+  @type("boolean") mustBeLast: boolean;
+}
+
 // === Define Player ===
 export class Player extends Schema {
   @type("string") sessionId!: string;
@@ -40,6 +49,8 @@ export class Player extends Schema {
   @type("boolean") hasCommunicated: boolean = false;
   @type(Card) communicationCard: Card;
   @type("string") communicationRank: CommunicationRank;
+
+  @type([SimpleTask]) hasTasks = new ArraySchema<SimpleTask>();
 }
 
 // === Define Trick ===

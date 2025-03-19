@@ -5,13 +5,22 @@
 import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 import { CrewGameState } from "./schema/CrewRoomState";
-import { Card, CardColor, CommunicationRank, GameStage, Player, Trick } from "./schema/CrewTypes";
+import { Card, CardColor, CommunicationRank, GameStage, Player, SimpleTask, Trick } from "./schema/CrewTypes";
 
 
 interface JoinOptions {
   displayName: string;
 }
 
+interface GameSetupInstructions {
+  includeTasks: boolean;
+  taskInstructions: {
+    plainTasks: number;
+    orderedTasks: number;
+    sequencedTasks: number;
+    lastTask: boolean;
+  }
+}
 export class CrewRoom extends Room<CrewGameState> {
   maxClients = 5;
 
@@ -19,7 +28,8 @@ export class CrewRoom extends Room<CrewGameState> {
     this.state = new CrewGameState();
 
     // GameStage = NotStarted
-    this.onMessage("start_game", (client) => {
+    this.onMessage("start_game", (client, gameSetupInstructions: GameSetupInstructions) => {
+      // TODO: Implement concept of a 'host' (the first player) - only they can set up game and start it.
       const player = this.state.players.get(client.sessionId);
       
       // Check current game stage is "not started"
@@ -29,9 +39,11 @@ export class CrewRoom extends Room<CrewGameState> {
       if (this.state.players.size <= 2) return;
 
       // Start the game
-      this.startGame();
+      this.startGame(gameSetupInstructions);
 
     })
+
+    // GameStage = GameSetup
 
     // GameStage = TrickStart or TrickMiddle
     this.onMessage("play_card", (client, cardData: { color: CardColor; number: number }) => {
@@ -195,6 +207,7 @@ export class CrewRoom extends Room<CrewGameState> {
   }
 
   onJoin(client: Client, options: JoinOptions) {
+    // TODO: If game has started, don't let anyone join
     const player = new Player();
     player.sessionId = client.sessionId;
 
@@ -212,8 +225,9 @@ export class CrewRoom extends Room<CrewGameState> {
     if (index !== -1) this.state.playerOrder.splice(index, 1);
   }
 
-  startGame() {
+  startGame(gameSetupInstructions: GameSetupInstructions) {
     this.state.currentGameStage = GameStage.GameSetup;
+    this.state.gameStarted = true;
 
     // Create and shuffle the deck
     const deck = this.generateDeck();
@@ -244,14 +258,18 @@ export class CrewRoom extends Room<CrewGameState> {
       console.log("Uh oh, can't find the Black 4 in anyone's hand??!");
     }
 
-    this.state.gameStarted = true;
-    this.state.currentGameStage = GameStage.TrickStart;
+    // Check if we are creating tasks
+    if (gameSetupInstructions.includeTasks) {
+      const generatedTasks = this.generateTasks(gameSetupInstructions.taskInstructions);
+      this.state.availableTasks.push(...generatedTasks);
+    }
+    // this.state.currentGameStage = GameStage.TrickStart;
   }
 
-  generateDeck(): Card[] {
+  generateDeck(includeBlackCards: boolean = true): Card[] {
     const colors = [CardColor.Yellow, CardColor.Green, CardColor.Pink, CardColor.Blue];
     const deck: Card[] = [];
-
+  
     for (const color of colors) {
       for (let num = 1; num <= 9; num++) {
         const card = new Card();
@@ -260,16 +278,95 @@ export class CrewRoom extends Room<CrewGameState> {
         deck.push(card);
       }
     }
-    for (let num = 1; num <= 4; num++) {
-      const card = new Card();
-      card.color = CardColor.Black;
-      card.number = num;
-      deck.push(card);
+  
+    if (includeBlackCards) {
+      for (let num = 1; num <= 4; num++) {
+        const card = new Card();
+        card.color = CardColor.Black;
+        card.number = num;
+        deck.push(card);
+      }
     }
-
+  
     return deck;
   }
 
+  generateTasks(instructions: GameSetupInstructions["taskInstructions"]): SimpleTask[] {
+    // === Build a pool of all cards ===
+    const cardPool = this.generateDeck(false); // No black cards for tasks
+    this.shuffle(cardPool);
+  
+    const taskList: SimpleTask[] = [];
+  
+    // Helper to pop a card from the pool
+    const drawCard = (): Card | null => {
+      return cardPool.length > 0 ? cardPool.pop()! : null;
+    };
+  
+    // Now create tasks and to add to the game state
+    // taskInstructions: {
+    //   plainTasks: number; Create this many tasks where taskNumber = 0, sequence = 0, mustBeLast = false
+    //   orderedTasks: number; Create this many tasks where sequence = 0, mustBeLast = false, and taskNumber is incrementing starting at 1
+    //   sequencedTasks: number; Create this many tasks where taskNumber = 0, mustBeLast = false, and Sequence is incrementing starting at 1
+    //   lastTask: boolean; Create one task where sequence = 0, taskNumber = 0, mustBeLast = true
+    // }
+
+    // === Plain Tasks ===
+    for (let i = 0; i < instructions.plainTasks; i++) {
+      const card = drawCard();
+      if (!card) break;
+      const task = new SimpleTask();
+      task.card = card;
+      task.player = "";
+      task.taskNumber = 0;
+      task.sequence = 0;
+      task.mustBeLast = false;
+      taskList.push(task);
+    }
+  
+    // === Ordered Tasks ===
+    for (let i = 1; i <= instructions.orderedTasks; i++) {
+      const card = drawCard();
+      if (!card) break;
+      const task = new SimpleTask();
+      task.card = card;
+      task.player = "";
+      task.taskNumber = i;
+      task.sequence = 0;
+      task.mustBeLast = false;
+      taskList.push(task);
+    }
+  
+    // === Sequenced Tasks ===
+    for (let i = 1; i <= instructions.sequencedTasks; i++) {
+      const card = drawCard();
+      if (!card) break;
+      const task = new SimpleTask();
+      task.card = card;
+      task.player = "";
+      task.taskNumber = 0;
+      task.sequence = i;
+      task.mustBeLast = false;
+      taskList.push(task);
+    }
+  
+    // === Last Task ===
+    if (instructions.lastTask) {
+      const card = drawCard();
+      if (card) {
+        const task = new SimpleTask();
+        task.card = card;
+        task.player = "";
+        task.taskNumber = 0;
+        task.sequence = 0;
+        task.mustBeLast = true;
+        taskList.push(task);
+      }
+    }
+  
+    return taskList;
+  }
+  
   shuffle(array: Card[]) {
     for (let i = array.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
