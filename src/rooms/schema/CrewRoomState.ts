@@ -13,5 +13,5 @@ export class CrewGameState extends Schema {
   @type(Trick) currentTrick: Trick;
   @type([Trick]) completedTricks = new ArraySchema<Trick>();
 
-  @type("string") currentGameStage: GameStage;
+  @type("string") currentGameStage: GameStage = GameStage.NotStarted;
 }

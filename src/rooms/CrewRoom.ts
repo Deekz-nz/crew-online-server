@@ -201,6 +201,7 @@ export class CrewRoom extends Room<CrewGameState> {
       console.log("Uh oh, can't find the Black 4 in anyone's hand??!");
     }
 
+    this.state.gameStarted = true;
     this.state.currentGameStage = GameStage.TrickStart;
   }
 
