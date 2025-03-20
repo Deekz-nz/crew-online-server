@@ -16,6 +16,7 @@ export class CrewGameState extends Schema {
 
   @type([SimpleTask]) allTasks = new ArraySchema<SimpleTask>();
   @type("number") completedTaskCount: number = 0;
+  @type("number") completedSequenceTaskCount: number = 0;
 
   @type("boolean") gameFinished: boolean = false;
   @type("boolean") gameSucceeded: boolean = false;

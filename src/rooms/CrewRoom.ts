@@ -157,6 +157,8 @@ export class CrewRoom extends Room<CrewGameState> {
           this.state.currentPlayer = winnerId;
           this.state.currentGameStage = GameStage.TrickEnd;
           this.state.completedTricks.push(trick);
+          // Evaluate this trick for tasks
+          this.evaluateTrickForTasks(trick);
         } else {
           // Trick still going - move to next player
           this.state.currentPlayer = this.getNextPlayer(client.sessionId);
@@ -183,20 +185,10 @@ export class CrewRoom extends Room<CrewGameState> {
       // Check that it is actually this person's turn
       if (!player || this.state.currentPlayer !== client.sessionId) return;
 
-      // Determine how many tricks are expected based on number of players
-      const numPlayers = this.state.playerOrder.length;
-      let totalTricksExpected = 0;
-
-      switch (numPlayers) {
-        case 5: totalTricksExpected = 8; break;
-        case 4: totalTricksExpected = 10; break;
-        case 3: totalTricksExpected = 13; break;
-        default: return; // Invalid player count
-      }
       
       const tricksPlayed = this.state.completedTricks.length;
 
-      if (tricksPlayed >= totalTricksExpected) {
+      if (tricksPlayed >= this.getExpectedTrickCount()) {
         // All tricks played: count how many each player won
         const trickWins = new Map<string, number>(); // sessionId -> win count
     
@@ -331,6 +323,22 @@ export class CrewRoom extends Room<CrewGameState> {
     return deck;
   }
 
+  getExpectedTrickCount(): number {
+    // Total players = total tricks usually (or your custom logic)
+    
+    // Determine how many tricks are expected based on number of players
+    const numPlayers = this.state.playerOrder.length;
+    let totalTricksExpected = 0;
+
+    switch (numPlayers) {
+      case 5: totalTricksExpected = 8; break;
+      case 4: totalTricksExpected = 10; break;
+      case 3: totalTricksExpected = 13; break;
+      default: return; // Invalid player count
+    }
+    return totalTricksExpected;
+  }
+  
   generateTasks(instructions: GameSetupInstructions["taskInstructions"]): SimpleTask[] {
     const cardPool = this.generateDeck(false); // No black cards
     this.shuffle(cardPool);
@@ -495,4 +503,118 @@ export class CrewRoom extends Room<CrewGameState> {
         return false;
     }
   }
+
+  evaluateTrickForTasks(trick: Trick) {
+    const trickIndex = this.state.completedTricks.length - 1;
+  
+    // === Ordered Tasks Evaluation ===
+    const orderedTasks = this.state.allTasks
+      .filter(task => !task.completed && !task.failed && task.taskCategory === "ordered")
+      .sort((a, b) => a.sequenceIndex - b.sequenceIndex);
+  
+    for (const task of orderedTasks) {
+      const cardInTrick = trick.playedCards.some(card =>
+        card.color === task.card.color && card.number === task.card.number
+      );
+  
+      if (!cardInTrick) continue; // Not in this trick, skip evaluation
+  
+      if (trick.trickWinner !== task.player) {
+        task.failed = true; // Card played, but wrong player won
+        continue;
+      }
+  
+      // Check if task is completed in correct order
+      if (task.sequenceIndex - 1 === this.state.completedTaskCount) {
+        task.completed = true;
+        task.completedAtTrickIndex = trickIndex;
+        this.state.completedTaskCount += 1;
+      } else {
+        task.failed = true; // Completed out of order
+      }
+    }
+  
+    // === Sequence Tasks Evaluation ===
+    const sequenceTasks = this.state.allTasks
+      .filter(task => !task.completed && !task.failed && task.taskCategory === "sequence")
+      .sort((a, b) => a.sequenceIndex - b.sequenceIndex);
+  
+    for (const task of sequenceTasks) {
+      const cardInTrick = trick.playedCards.some(card =>
+        card.color === task.card.color && card.number === task.card.number
+      );
+  
+      if (!cardInTrick) continue;
+  
+      if (trick.trickWinner !== task.player) {
+        task.failed = true;
+        continue;
+      }
+  
+      if (task.sequenceIndex - 1 === this.state.completedSequenceTaskCount) {
+        task.completed = true;
+        task.completedAtTrickIndex = trickIndex;
+        this.state.completedSequenceTaskCount += 1;
+        this.state.completedTaskCount += 1; // Count towards total as well
+      } else {
+        task.failed = true;
+      }
+    }
+  
+    // === Plain Tasks Evaluation ===
+    const plainTasks = this.state.allTasks
+      .filter(task => !task.completed && !task.failed && task.taskCategory === "plain");
+  
+    for (const task of plainTasks) {
+      const cardInTrick = trick.playedCards.some(card =>
+        card.color === task.card.color && card.number === task.card.number
+      );
+  
+      if (!cardInTrick) continue;
+  
+      if (trick.trickWinner === task.player) {
+        task.completed = true;
+        task.completedAtTrickIndex = trickIndex;
+        this.state.completedTaskCount += 1;
+      } else {
+        task.failed = true;
+      }
+    }
+  
+    // === Must Be Last Task Evaluation ===
+    const lastTrickIndex = this.state.completedTricks.length - 1;
+    const isLastTrick = this.state.completedTricks.length === this.getExpectedTrickCount();
+  
+    const lastTasks = this.state.allTasks
+      .filter(task => !task.completed && !task.failed && task.taskCategory === "must_be_last");
+  
+    for (const task of lastTasks) {
+      const cardInTrick = trick.playedCards.some(card =>
+        card.color === task.card.color && card.number === task.card.number
+      );
+  
+      if (!cardInTrick) continue;
+  
+      if (trick.trickWinner !== task.player) {
+        task.failed = true;
+        continue;
+      }
+  
+      if (isLastTrick) {
+        task.completed = true;
+        task.completedAtTrickIndex = trickIndex;
+        this.state.completedTaskCount += 1;
+      } else {
+        task.failed = true;
+      }
+    }
+  
+    // === Final Check for Remaining Ordered Tasks ===
+    for (const task of orderedTasks) {
+      if (!task.completed && !task.failed && task.sequenceIndex <= this.state.completedTaskCount) {
+        task.failed = true; // Missed its proper order slot
+      }
+    }
+  }
+  
 }
