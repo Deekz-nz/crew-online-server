@@ -47,46 +47,42 @@ export class CrewRoom extends Room<CrewGameState> {
     this.onMessage("take_task", (client, taskData: SimpleTask) => {
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
     
-      const player = this.state.players.get(client.sessionId);
-      if (!player) return;
+      const task = this.state.allTasks.find(t => this.isSameTask(t, taskData)); // find matching task
+      if (!task) return;
     
-      // Find task in availableTasks
-      const taskIndex = this.state.availableTasks.findIndex(task =>
-        this.isSameTask(task, taskData)
-      );
-      if (taskIndex === -1) return; // Task not found
+      // Task already taken
+      if (task.player !== "") return;
     
-      const [task] = this.state.availableTasks.splice(taskIndex, 1);
-      task.player = client.sessionId; // Assign task to player
-      player.hasTasks.push(task);
+      // Assign task to player
+      task.player = client.sessionId;
     });
+    
 
     // GameStage = GameSetup
     this.onMessage("return_task", (client, taskData: SimpleTask) => {
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
     
-      const player = this.state.players.get(client.sessionId);
-      if (!player) return;
+      const task = this.state.allTasks.find(t => this.isSameTask(t, taskData)); // find matching task
+      if (!task) return;
     
-      // Find task in player's tasks
-      const taskIndex = player.hasTasks.findIndex(task =>
-        this.isSameTask(task, taskData)
-      );
-      if (taskIndex === -1) return; // Task not found
+      // Can only return your own task
+      if (task.player !== client.sessionId) return;
     
-      const [task] = player.hasTasks.splice(taskIndex, 1);
-      task.player = ""; // Reset player assignment
-      this.state.availableTasks.push(task);
+      // Return task
+      task.player = "";
     });
+    
 
     // GameStage = GameSetup
     this.onMessage("finish_task_allocation", (client) => {
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
     
-      if (this.state.availableTasks.length > 0) return; // Not all tasks taken
+      const unassignedTasks = this.state.allTasks.filter(task => task.player === "");
+      if (unassignedTasks.length > 0) return; // Not all tasks taken
     
       this.state.currentGameStage = GameStage.TrickStart;
     });
+    
 
     // GameStage = TrickStart or TrickMiddle
     this.onMessage("play_card", (client, cardData: { color: CardColor; number: number }) => {
@@ -302,11 +298,11 @@ export class CrewRoom extends Room<CrewGameState> {
       console.log("Uh oh, can't find the Black 4 in anyone's hand??!");
     }
 
-    // Check if we are creating tasks
     if (gameSetupInstructions.includeTasks) {
       const generatedTasks = this.generateTasks(gameSetupInstructions.taskInstructions);
-      this.state.availableTasks.push(...generatedTasks);
+      this.state.allTasks.push(...generatedTasks);
     }
+    
     // this.state.currentGameStage = GameStage.TrickStart;
   }
 
@@ -336,25 +332,12 @@ export class CrewRoom extends Room<CrewGameState> {
   }
 
   generateTasks(instructions: GameSetupInstructions["taskInstructions"]): SimpleTask[] {
-    // === Build a pool of all cards ===
-    const cardPool = this.generateDeck(false); // No black cards for tasks
+    const cardPool = this.generateDeck(false); // No black cards
     this.shuffle(cardPool);
-  
     const taskList: SimpleTask[] = [];
   
-    // Helper to pop a card from the pool
-    const drawCard = (): Card | null => {
-      return cardPool.length > 0 ? cardPool.pop()! : null;
-    };
+    const drawCard = (): Card | null => cardPool.pop() ?? null;
   
-    // Now create tasks and to add to the game state
-    // taskInstructions: {
-    //   plainTasks: number; Create this many tasks where taskNumber = 0, sequence = 0, mustBeLast = false
-    //   orderedTasks: number; Create this many tasks where sequence = 0, mustBeLast = false, and taskNumber is incrementing starting at 1
-    //   sequencedTasks: number; Create this many tasks where taskNumber = 0, mustBeLast = false, and Sequence is incrementing starting at 1
-    //   lastTask: boolean; Create one task where sequence = 0, taskNumber = 0, mustBeLast = true
-    // }
-
     // === Plain Tasks ===
     for (let i = 0; i < instructions.plainTasks; i++) {
       const card = drawCard();
@@ -362,9 +345,8 @@ export class CrewRoom extends Room<CrewGameState> {
       const task = new SimpleTask();
       task.card = card;
       task.player = "";
-      task.taskNumber = 0;
-      task.sequence = 0;
-      task.mustBeLast = false;
+      task.taskCategory = "plain";
+      task.sequenceIndex = 0;
       taskList.push(task);
     }
   
@@ -375,9 +357,8 @@ export class CrewRoom extends Room<CrewGameState> {
       const task = new SimpleTask();
       task.card = card;
       task.player = "";
-      task.taskNumber = i;
-      task.sequence = 0;
-      task.mustBeLast = false;
+      task.taskCategory = "ordered";
+      task.sequenceIndex = i; // Starts at 1
       taskList.push(task);
     }
   
@@ -388,38 +369,37 @@ export class CrewRoom extends Room<CrewGameState> {
       const task = new SimpleTask();
       task.card = card;
       task.player = "";
-      task.taskNumber = 0;
-      task.sequence = i;
-      task.mustBeLast = false;
+      task.taskCategory = "sequence";
+      task.sequenceIndex = i; // Starts at 1
       taskList.push(task);
     }
   
-    // === Last Task ===
+    // === Must Be Last Task ===
     if (instructions.lastTask) {
       const card = drawCard();
       if (card) {
         const task = new SimpleTask();
         task.card = card;
         task.player = "";
-        task.taskNumber = 0;
-        task.sequence = 0;
-        task.mustBeLast = true;
+        task.taskCategory = "must_be_last";
+        task.sequenceIndex = 0;
         taskList.push(task);
       }
     }
   
     return taskList;
   }
+  
 
-  isSameTask(taskA: SimpleTask, taskB: SimpleTask): boolean {
+  isSameTask(a: SimpleTask, b: SimpleTask): boolean {
     return (
-      taskA.card.color === taskB.card.color &&
-      taskA.card.number === taskB.card.number &&
-      taskA.taskNumber === taskB.taskNumber &&
-      taskA.sequence === taskB.sequence &&
-      taskA.mustBeLast === taskB.mustBeLast
+      a.card.color === b.card.color &&
+      a.card.number === b.card.number &&
+      a.taskCategory === b.taskCategory &&
+      a.sequenceIndex === b.sequenceIndex
     );
   }
+  
   
   shuffle(array: Card[]) {
     for (let i = array.length - 1; i > 0; i--) {

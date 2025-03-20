@@ -14,7 +14,10 @@ export class CrewGameState extends Schema {
   @type(Trick) currentTrick: Trick;
   @type([Trick]) completedTricks = new ArraySchema<Trick>();
 
-  @type([SimpleTask]) availableTasks = new ArraySchema<SimpleTask>();
+  @type([SimpleTask]) allTasks = new ArraySchema<SimpleTask>();
+  @type("number") completedTaskCount: number = 0;
 
+  @type("boolean") gameFinished: boolean = false;
+  @type("boolean") gameSucceeded: boolean = false;
   @type("string") currentGameStage: GameStage = GameStage.NotStarted;
 }

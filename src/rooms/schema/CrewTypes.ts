@@ -25,20 +25,31 @@ export enum CommunicationRank {
   Unknown = "unknown"
 }
 
+export type TaskCategory = "ordered" | "plain" | "sequence" | "must_be_last";
+
 // === Define Card ===
 export class Card extends Schema {
   @type("string") color!: CardColor; // "yellow" | "green" | "pink" | "blue"
   @type("number") number!: number; // 1 - 9
 }
 
-// === Define Task ===
 export class SimpleTask extends Schema {
   @type(Card) card: Card;
   @type("string") player: string;
   @type("number") taskNumber: number;
-  @type("number") sequence: number;
-  @type("boolean") mustBeLast: boolean;
+
+  @type("string") taskCategory: TaskCategory;
+
+  // Only used for ordered/sequence tasks
+  @type("number") sequenceIndex: number; // 0-based index in order
+
+  @type("boolean") failed: boolean = false;
+  @type("boolean") completed: boolean = false;
+
+  // Optional metadata for tracking when this task was completed
+  @type("number") completedAtTrickIndex?: number;
 }
+
 
 // === Define Player ===
 export class Player extends Schema {
@@ -49,8 +60,6 @@ export class Player extends Schema {
   @type("boolean") hasCommunicated: boolean = false;
   @type(Card) communicationCard: Card;
   @type("string") communicationRank: CommunicationRank;
-
-  @type([SimpleTask]) hasTasks = new ArraySchema<SimpleTask>();
 }
 
 // === Define Trick ===
