@@ -204,12 +204,18 @@ export class CrewRoom extends Room<CrewGameState> {
             trickWins.set(winnerId, (trickWins.get(winnerId) || 0) + 1);
           }
         }
-    
-        // For now, just console log
-        console.log("Trick wins per player:", Array.from(trickWins.entries()));
-    
         this.state.currentGameStage = GameStage.GameEnd;
         this.state.currentTrick = new Trick();
+        this.state.gameFinished = true;
+        
+        // Check task success
+        const allTasksCompleted = this.state.allTasks.every(task => task.completed);
+        const noTasksFailed = this.state.allTasks.every(task => !task.failed);
+        
+        // Set success flag
+        this.state.gameSucceeded = allTasksCompleted && noTasksFailed;
+        
+        console.log("Game finished. Success:", this.state.gameSucceeded);
     
       } else {
         // More tricks to play: reset for next trick
@@ -242,6 +248,15 @@ export class CrewRoom extends Room<CrewGameState> {
       player.communicationCard = schemaCard;
       player.communicationRank = details.cardRank;
     });
+
+    this.onMessage("restart_game", (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.isHost) return; // Only host can restart
+    
+      console.log(`Game is being restarted by ${player.displayName}`);
+      this.resetGameState();
+    });
+    
 
   }
 
@@ -645,5 +660,29 @@ export class CrewRoom extends Room<CrewGameState> {
       }
     }
   }
+
+  resetGameState() {
+    this.state.gameStarted = false;
+  
+    // Reset player state but keep displayName, sessionId, isHost
+    this.state.players.forEach((player) => {
+      player.hand = new ArraySchema<Card>();
+      player.hasCommunicated = false;
+      player.communicationCard = null;
+      player.communicationRank = CommunicationRank.Unknown;
+    });
+  
+    this.state.currentPlayer = "";
+    this.state.commanderPlayer = "";
+    this.state.currentTrick = new Trick();
+    this.state.completedTricks = new ArraySchema<Trick>();
+    this.state.allTasks = new ArraySchema<SimpleTask>();
+    this.state.completedTaskCount = 0;
+    this.state.completedSequenceTaskCount = 0;
+    this.state.gameFinished = false;
+    this.state.gameSucceeded = false;
+    this.state.currentGameStage = GameStage.NotStarted;
+  }
+  
   
 }
