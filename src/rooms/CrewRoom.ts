@@ -109,7 +109,7 @@ export class CrewRoom extends Room<CrewGameState> {
         player.communicationCard.color === playedCard.color &&
         player.communicationCard.number === playedCard.number
       ) {
-        player.communicationCard = new Card(); // Reset to empty card
+        player.communicationCard = null; // Reset to null
         player.communicationRank = CommunicationRank.Unknown;
         communicationCleared = true;
       }
@@ -214,26 +214,28 @@ export class CrewRoom extends Room<CrewGameState> {
     });
 
     //GameStage = TrickEnd or TrickStart
-    this.onMessage("communicate", (client, details: { card: Card, cardRank: CommunicationRank }) => {
+    this.onMessage("communicate", (client, details: { card: Card; cardRank: CommunicationRank }) => {
       const player = this.state.players.get(client.sessionId);
-      // Check GameStage
+    
+      // Validate game stage
       if (this.state.currentGameStage !== GameStage.TrickStart && this.state.currentGameStage !== GameStage.TrickEnd) return;
-      
-      // Check if Player has already communicated
+    
+      // Check if player already communicated
       if (player.hasCommunicated) return;
-
-      // Check if communication is valid
-      if (!this.isValidCommunication(player, details.card, details.cardRank)) {
-        return;
-      }
-      
-      // Update player's communication
+    
+      // Validate communication
+      if (!this.isValidCommunication(player, details.card, details.cardRank)) return;
+    
+      // Convert plain object to Card schema
+      const schemaCard = new Card();
+      schemaCard.color = details.card.color;
+      schemaCard.number = details.card.number;
+    
+      // Assign schema instance
       player.hasCommunicated = true;
-      player.communicationCard = details.card;
+      player.communicationCard = schemaCard;
       player.communicationRank = details.cardRank;
-      
-
-    })
+    });
 
   }
 
