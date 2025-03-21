@@ -493,6 +493,9 @@ export class CrewRoom extends Room<CrewGameState> {
     card: Card,
     rank: CommunicationRank
   ): boolean {
+    // Check card isn't black
+    if (card.color === "black") return false;
+    
     // Find all cards in player's hand of the same color
     const sameColorCards = player.hand.filter((c) => c.color === card.color);
   
