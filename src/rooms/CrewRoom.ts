@@ -38,6 +38,9 @@ export class CrewRoom extends Room<CrewGameState> {
       // Check there is at least 3 players registered
       if (this.state.players.size <= 2) return;
 
+      // Check if player is host
+      if (!player?.isHost) return;
+
       // Start the game
       this.startGame(gameSetupInstructions);
 
@@ -248,16 +251,34 @@ export class CrewRoom extends Room<CrewGameState> {
     const playerCount = this.state.players.size + 1;
     player.displayName = options.displayName || "Player " + playerCount.toString();
 
+    if (this.state.players.size === 0) {
+      player.isHost = true;
+    }
     this.state.players.set(client.sessionId, player);
     this.state.playerOrder.push(client.sessionId);
+    
   }
 
   onLeave(client: Client, consented: boolean) {
+    const player = this.state.players.get(client.sessionId);
+    const wasHost = player?.isHost;
+  
+    // Remove player from players map
     this.state.players.delete(client.sessionId);
+  
+    // Remove from playerOrder array
     const index = this.state.playerOrder.indexOf(client.sessionId);
     if (index !== -1) this.state.playerOrder.splice(index, 1);
+  
+    // Reassign host if necessary
+    if (wasHost && this.state.players.size > 0) {
+      const firstKey = this.state.players.keys().next().value;
+      const newHost = this.state.players.get(firstKey);
+      if (newHost) {
+        newHost.isHost = true;
+      }
+    }
   }
-
   startGame(gameSetupInstructions: GameSetupInstructions) {
     this.state.currentGameStage = GameStage.GameSetup;
     this.state.gameStarted = true;

@@ -60,6 +60,8 @@ export class Player extends Schema {
   @type("boolean") hasCommunicated: boolean = false;
   @type(Card) communicationCard: Card;
   @type("string") communicationRank: CommunicationRank;
+
+  @type("boolean") isHost: boolean = false;
 }
 
 // === Define Trick ===
