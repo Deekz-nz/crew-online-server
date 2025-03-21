@@ -83,6 +83,8 @@ export class CrewRoom extends Room<CrewGameState> {
       const unassignedTasks = this.state.allTasks.filter(task => task.player === "");
       if (unassignedTasks.length > 0) return; // Not all tasks taken
     
+      const newTrick = new Trick();
+      this.state.currentTrick = newTrick;
       this.state.currentGameStage = GameStage.TrickStart;
     });
     
