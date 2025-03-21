@@ -107,10 +107,11 @@ export class CrewRoom extends Room<CrewGameState> {
       // Remove card from player's hand
       const [playedCard] = player.hand.splice(cardIndex, 1);
 
-        // Check if this card was communicated — track whether we cleared it in case we revert
+      // Check if this card was communicated — track whether we cleared it in case we revert
       let communicationCleared = false;
       if (
         player.hasCommunicated &&
+        player.communicationCard &&
         player.communicationCard.color === playedCard.color &&
         player.communicationCard.number === playedCard.number
       ) {
@@ -495,7 +496,7 @@ export class CrewRoom extends Room<CrewGameState> {
   ): boolean {
     // Check card isn't black
     if (card.color === "black") return false;
-    
+
     // Find all cards in player's hand of the same color
     const sameColorCards = player.hand.filter((c) => c.color === card.color);
   
