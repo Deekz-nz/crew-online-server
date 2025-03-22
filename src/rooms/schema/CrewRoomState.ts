@@ -13,6 +13,7 @@ export class CrewGameState extends Schema {
   
   @type(Trick) currentTrick: Trick;
   @type([Trick]) completedTricks = new ArraySchema<Trick>();
+  @type("number") expectedTrickCount: number = 0;
 
   @type([SimpleTask]) allTasks = new ArraySchema<SimpleTask>();
   @type("number") completedTaskCount: number = 0;

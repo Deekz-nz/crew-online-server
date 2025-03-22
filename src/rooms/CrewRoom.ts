@@ -194,7 +194,7 @@ export class CrewRoom extends Room<CrewGameState> {
       
       const tricksPlayed = this.state.completedTricks.length;
 
-      if (tricksPlayed >= this.getExpectedTrickCount()) {
+      if (tricksPlayed >= this.state.expectedTrickCount) {
         // All tricks played: count how many each player won
         const trickWins = new Map<string, number>(); // sessionId -> win count
     
@@ -321,6 +321,9 @@ export class CrewRoom extends Room<CrewGameState> {
   
     // Randomize starting index
     const startIndex = Math.floor(Math.random() * playerIds.length);
+
+    // Set expected trick count
+    this.state.expectedTrickCount = this.getExpectedTrickCount();
 
     // Deal cards starting from random player
     let dealIndex = startIndex;
@@ -638,7 +641,7 @@ export class CrewRoom extends Room<CrewGameState> {
   
     // === Must Be Last Task Evaluation ===
     const lastTrickIndex = this.state.completedTricks.length - 1;
-    const isLastTrick = this.state.completedTricks.length === this.getExpectedTrickCount();
+    const isLastTrick = this.state.completedTricks.length === this.state.expectedTrickCount;
   
     const lastTasks = this.state.allTasks
       .filter(task => !task.completed && !task.failed && task.taskCategory === "must_be_last");
