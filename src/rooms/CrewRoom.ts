@@ -260,6 +260,19 @@ export class CrewRoom extends Room<CrewGameState> {
 
   }
 
+  onAuth(client: Client, options: any, request: any) {
+    const token = options.token;  // Get token from client
+    console.log("token from client: ", token);
+  
+    const expectedSecret = process.env.SHARED_SECRET;
+    console.log("expected secret: ", expectedSecret);
+    if (token !== expectedSecret) {
+      throw new Error("Unauthorized");
+    }
+  
+    return true;
+  }
+
   onJoin(client: Client, options: JoinOptions) {
     // TODO: If game has started, don't let anyone join
     const player = new Player();
