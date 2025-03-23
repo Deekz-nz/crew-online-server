@@ -318,8 +318,22 @@ export class CrewRoom extends Room<CrewGameState> {
   }
 
   onJoin(client: Client, options: JoinOptions) {
-    // TODO: If game has started, don't let anyone join
-    const player = new Player();
+    let player = this.state.players.get(client.sessionId);
+  
+    if (player) {
+      // Reconnecting player
+      console.log(`Player ${player.displayName} reconnected`);
+      player.isConnected = true;
+      this.updateActivity();
+      return;
+    }
+
+    // Game has started - don't let anyone join
+    // TODO: Let them join as a spectator
+    if (this.state.gameStarted === true) return;
+  
+    this.updateActivity();
+    player = new Player();
     player.sessionId = client.sessionId;
 
     // Get current player count for a fallback display name
@@ -336,16 +350,39 @@ export class CrewRoom extends Room<CrewGameState> {
 
   onLeave(client: Client, consented: boolean) {
     const player = this.state.players.get(client.sessionId);
-    const wasHost = player?.isHost;
+    if (!player) return;
   
-    // Remove player from players map
-    this.state.players.delete(client.sessionId);
+    const wasHost = player.isHost;
   
-    // Remove from playerOrder array
-    const index = this.state.playerOrder.indexOf(client.sessionId);
-    if (index !== -1) this.state.playerOrder.splice(index, 1);
+    // Mark as disconnected — notify clients via schema
+    player.isConnected = false;
   
-    // Reassign host if necessary
+    if (consented) {
+      // Player left intentionally (closed tab, etc.)
+      this.removePlayer(client.sessionId, wasHost);
+    } else {
+      // Player disconnected unexpectedly (e.g., network drop)
+      const RECONNECT_TIMEOUT = 300; // seconds
+  
+      this.allowReconnection(client, RECONNECT_TIMEOUT).then(() => {
+        console.log(`Player ${player.displayName} reconnected`);
+        player.isConnected = true;
+      }).catch(() => {
+        console.log(`Player ${player.displayName} failed to reconnect in time`);
+        this.removePlayer(client.sessionId, wasHost);
+      });
+    }
+  }
+
+    // Helper to remove player and reassign host if needed
+  private removePlayer(sessionId: string, wasHost: boolean) {
+    this.state.players.delete(sessionId);
+
+    const index = this.state.playerOrder.indexOf(sessionId);
+    if (index !== -1) {
+      this.state.playerOrder.splice(index, 1);
+    }
+
     if (wasHost && this.state.players.size > 0) {
       const firstKey = this.state.players.keys().next().value;
       const newHost = this.state.players.get(firstKey);

@@ -62,6 +62,7 @@ export class Player extends Schema {
   @type("string") communicationRank: CommunicationRank;
 
   @type("boolean") isHost: boolean = false;
+  @type("boolean") isConnected: boolean = true;
 }
 
 // === Define Trick ===
