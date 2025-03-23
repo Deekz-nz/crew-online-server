@@ -34,6 +34,8 @@ export class CrewRoom extends Room<CrewGameState> {
     if (roomCode) {
       this.roomId = roomCode;
     }
+
+    console.log("Created room with id: ", this.roomId);
     // Set interval to check for inactivity
     const TIMEOUT_MINUTES = 10;
     const TIMEOUT_DURATION = TIMEOUT_MINUTES * 60 * 1000; // 10 minutes
@@ -345,6 +347,8 @@ export class CrewRoom extends Room<CrewGameState> {
     const playerCount = this.state.players.size + 1;
     player.displayName = options.displayName || "Player " + playerCount.toString();
 
+    console.log("User (", player.displayName, ") just joined room: ", this.roomId);
+  
     if (this.state.players.size === 0) {
       player.isHost = true;
     }
@@ -399,7 +403,7 @@ export class CrewRoom extends Room<CrewGameState> {
 
   onDispose() {
     clearInterval(this.inactivityInterval);
-    console.log("Room disposed");
+    console.log("Room disposed, id: ", this.roomId);
   }
 
   startGame(gameSetupInstructions: GameSetupInstructions) {
