@@ -29,6 +29,11 @@ export class CrewRoom extends Room<CrewGameState> {
   onCreate(options: any) {
     this.state = new CrewGameState();
 
+    // Set custom room ID
+    const roomCode = options.roomCode;
+    if (roomCode) {
+      this.roomId = roomCode;
+    }
     // Set interval to check for inactivity
     const TIMEOUT_MINUTES = 10;
     const TIMEOUT_DURATION = TIMEOUT_MINUTES * 60 * 1000; // 10 minutes
