@@ -22,14 +22,33 @@ interface GameSetupInstructions {
   }
 }
 export class CrewRoom extends Room<CrewGameState> {
+  private lastActivityTimestamp: number;
+  private inactivityInterval: NodeJS.Timeout;
   maxClients = 5;
 
   onCreate(options: any) {
     this.state = new CrewGameState();
 
+    // Set interval to check for inactivity
+    const TIMEOUT_MINUTES = 10;
+    const TIMEOUT_DURATION = TIMEOUT_MINUTES * 60 * 1000; // 10 minutes
+    this.inactivityInterval = setInterval(() => {
+      const now = Date.now();
+      if (now - this.lastActivityTimestamp > TIMEOUT_DURATION) {
+        console.log("Room inactive for 10 minutes. Disposing...");
+
+        // Notify clients BEFORE disconnecting
+        // TODO: Implement frontend handling of this message
+        this.broadcast("room_closed", { reason: "inactivity_timeout" });
+
+        setTimeout(() => {  
+            this.disconnect();
+        }, 1000); // delay to allow message delivery 
+      }
+    }, 60 * 1000); // Check every minute
+
     // GameStage = NotStarted
     this.onMessage("start_game", (client, gameSetupInstructions: GameSetupInstructions) => {
-      // TODO: Implement concept of a 'host' (the first player) - only they can set up game and start it.
       const player = this.state.players.get(client.sessionId);
       
       // Check current game stage is "not started"
@@ -40,6 +59,9 @@ export class CrewRoom extends Room<CrewGameState> {
 
       // Check if player is host
       if (!player?.isHost) return;
+
+      // Update inactive timer
+      this.updateActivity();
 
       // Start the game
       this.startGame(gameSetupInstructions);
@@ -55,6 +77,9 @@ export class CrewRoom extends Room<CrewGameState> {
     
       // Task already taken
       if (task.player !== "") return;
+      
+      // Update inactive timer
+      this.updateActivity();
     
       // Assign task to player
       task.player = client.sessionId;
@@ -71,6 +96,9 @@ export class CrewRoom extends Room<CrewGameState> {
       // Can only return your own task
       if (task.player !== client.sessionId) return;
     
+      // Update inactive timer
+      this.updateActivity();
+
       // Return task
       task.player = "";
     });
@@ -78,11 +106,15 @@ export class CrewRoom extends Room<CrewGameState> {
 
     // GameStage = GameSetup
     this.onMessage("finish_task_allocation", (client) => {
+      this.updateActivity();
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
     
       const unassignedTasks = this.state.allTasks.filter(task => task.player === "");
       if (unassignedTasks.length > 0) return; // Not all tasks taken
     
+      // Update inactive timer
+      this.updateActivity();
+
       const newTrick = new Trick();
       this.state.currentTrick = newTrick;
       this.state.currentGameStage = GameStage.TrickStart;
@@ -91,6 +123,7 @@ export class CrewRoom extends Room<CrewGameState> {
 
     // GameStage = TrickStart or TrickMiddle
     this.onMessage("play_card", (client, cardData: { color: CardColor; number: number }) => {
+      this.updateActivity();
       const player = this.state.players.get(client.sessionId);
       // Check GameStage
       if (this.state.currentGameStage !== GameStage.TrickStart && this.state.currentGameStage !== GameStage.TrickMiddle) return;
@@ -121,9 +154,12 @@ export class CrewRoom extends Room<CrewGameState> {
       }
 
       const trick = this.state.currentTrick;
+      
+      // Update inactive timer
+      this.updateActivity();
 
       if (this.state.currentGameStage === GameStage.TrickStart) {
-        // === First card of the trick ===
+        // === First card of the trick ===  
         // Update state
         const newTrick = new Trick();
         newTrick.playedCards.push(playedCard);
@@ -191,6 +227,8 @@ export class CrewRoom extends Room<CrewGameState> {
       // Check that it is actually this person's turn
       if (!player || this.state.currentPlayer !== client.sessionId) return;
 
+      // Update inactive timer
+      this.updateActivity();
       
       const tricksPlayed = this.state.completedTricks.length;
 
@@ -238,6 +276,9 @@ export class CrewRoom extends Room<CrewGameState> {
       // Validate communication
       if (!this.isValidCommunication(player, details.card, details.cardRank)) return;
     
+      // Update inactive timer
+      this.updateActivity();
+
       // Convert plain object to Card schema
       const schemaCard = new Card();
       schemaCard.color = details.card.color;
@@ -258,6 +299,11 @@ export class CrewRoom extends Room<CrewGameState> {
     });
     
 
+  }
+
+  // Helper method for inactivity
+  updateActivity() {
+    this.lastActivityTimestamp = Date.now();
   }
 
   onAuth(client: Client, options: any, request: any) {
@@ -308,6 +354,12 @@ export class CrewRoom extends Room<CrewGameState> {
       }
     }
   }
+
+  onDispose() {
+    clearInterval(this.inactivityInterval);
+    console.log("Room disposed");
+  }
+
   startGame(gameSetupInstructions: GameSetupInstructions) {
     this.state.currentGameStage = GameStage.GameSetup;
     this.state.gameStarted = true;
