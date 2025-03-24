@@ -74,7 +74,7 @@ export class Trick extends Schema {
 }
 
 // === Define PostGameStats ===
-export class PostGameStats extends Schema {
-  @type({ map: Card }) startingHands = new MapSchema<ArraySchema<Card>>();
-  @type({ map: SimpleTask }) allocatedTasks = new MapSchema<ArraySchema<SimpleTask>>();
+export class PlayerHistory extends Schema {
+  @type([Card]) cards = new ArraySchema<Card>();
+  @type([SimpleTask]) tasks = new ArraySchema<SimpleTask>();
 }

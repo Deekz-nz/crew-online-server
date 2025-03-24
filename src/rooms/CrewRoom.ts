@@ -5,7 +5,7 @@
 import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 import { CrewGameState } from "./schema/CrewRoomState";
-import { Card, CardColor, CommunicationRank, GameStage, Player, SimpleTask, Trick } from "./schema/CrewTypes";
+import { Card, CardColor, CommunicationRank, GameStage, Player, PlayerHistory, SimpleTask, Trick } from "./schema/CrewTypes";
 
 
 interface JoinOptions {
@@ -122,24 +122,16 @@ export class CrewRoom extends Room<CrewGameState> {
       // Update inactive timer
       this.updateActivity();
 
-      // // Save player hands
-      // for (const [playerId, player] of this.state.players.entries()) {
-      //   const handCopy = new ArraySchema<Card>(...player.hand); // Clone cards
-      //   this.state.postGameStats.startingHands.set(playerId, handCopy);
-      // }
-
-      // // Save task allocations
-      // const tasksByPlayer: Record<string, SimpleTask[]> = {};
-      // for (const task of this.state.allTasks) {
-      //   if (!tasksByPlayer[task.player]) {
-      //     tasksByPlayer[task.player] = [];
-      //   }
-      //   tasksByPlayer[task.player].push(task);
-      // }
-      // for (const [playerId, tasks] of Object.entries(tasksByPlayer)) {
-      //   const taskCopy = new ArraySchema<SimpleTask>(...tasks);
-      //   this.state.postGameStats.allocatedTasks.set(playerId, taskCopy);
-      // }
+      // Save player hands & tasks
+      for (const [playerId, player] of this.state.players.entries()) {
+        const history = new PlayerHistory();
+        history.cards.push(...player.hand);
+      
+        const playerTasks = this.state.allTasks.filter(task => task.player === playerId);
+        history.tasks.push(...playerTasks);
+      
+        this.state.historyPlayerStats.set(playerId, history);
+      }
 
       const newTrick = new Trick();
       this.state.currentTrick = newTrick;
