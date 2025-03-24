@@ -72,3 +72,9 @@ export class Trick extends Schema {
   @type("string") trickWinner: string;
   @type("boolean") trickCompleted: boolean;
 }
+
+// === Define PostGameStats ===
+export class PostGameStats extends Schema {
+  @type({ map: [Card] }) startingHands = new MapSchema<ArraySchema<Card>>(); // playerId -> [Card]
+  @type({ map: [SimpleTask] }) allocatedTasks = new MapSchema<ArraySchema<SimpleTask>>(); // playerId -> [Task]
+}

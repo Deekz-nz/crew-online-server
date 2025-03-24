@@ -1,5 +1,5 @@
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
-import { Card, GameStage, Player, SimpleTask, Trick } from "./CrewTypes";
+import { Card, GameStage, Player, PostGameStats, SimpleTask, Trick } from "./CrewTypes";
 
 // === Define Room State ===
 export class CrewGameState extends Schema {
@@ -22,4 +22,6 @@ export class CrewGameState extends Schema {
   @type("boolean") gameFinished: boolean = false;
   @type("boolean") gameSucceeded: boolean = false;
   @type("string") currentGameStage: GameStage = GameStage.NotStarted;
+
+  @type(PostGameStats) postGameStats = new PostGameStats();
 }
