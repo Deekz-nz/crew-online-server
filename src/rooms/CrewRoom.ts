@@ -143,11 +143,22 @@ export class CrewRoom extends Room<CrewGameState> {
     this.onMessage("play_card", (client, cardData: { color: CardColor; number: number }) => {
       this.updateActivity();
       const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+
+      const intentionExists = Array.from(this.state.players.values()).some(p => p.intendsToCommunicate);
+      if (intentionExists) {
+        // Clear flag if the player themselves had the intention and decided to play anyway
+        if (player.intendsToCommunicate) {
+          player.intendsToCommunicate = false;
+        } else {
+          return;
+        }
+      }
       // Check GameStage
       if (this.state.currentGameStage !== GameStage.TrickStart && this.state.currentGameStage !== GameStage.TrickMiddle) return;
 
       // Check that it is actually this person's turn
-      if (!player || this.state.currentPlayer !== client.sessionId) return;
+      if (this.state.currentPlayer !== client.sessionId) return;
 
       // Find and remove the card from player's hand
       const cardIndex = player.hand.findIndex(
@@ -313,6 +324,21 @@ export class CrewRoom extends Room<CrewGameState> {
       }
     });
 
+    // Player intends to communicate
+    this.onMessage("intend_communication", (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      this.updateActivity();
+      player.intendsToCommunicate = true;
+    });
+
+    this.onMessage("cancel_intention", (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      this.updateActivity();
+      player.intendsToCommunicate = false;
+    });
+
     //GameStage = TrickEnd or TrickStart
     this.onMessage("communicate", (client, details: { card: Card; cardRank: CommunicationRank }) => {
       const player = this.state.players.get(client.sessionId);
@@ -338,6 +364,7 @@ export class CrewRoom extends Room<CrewGameState> {
       player.hasCommunicated = true;
       player.communicationCard = schemaCard;
       player.communicationRank = details.cardRank;
+      player.intendsToCommunicate = false;
     });
 
     this.onMessage("restart_game", (client) => {
@@ -414,6 +441,7 @@ export class CrewRoom extends Room<CrewGameState> {
     if (!player) return;
   
     const wasHost = player.isHost;
+    player.intendsToCommunicate = false;
   
     // Mark as disconnected — notify clients via schema
     player.isConnected = false;
@@ -834,6 +862,7 @@ export class CrewRoom extends Room<CrewGameState> {
       player.hasCommunicated = false;
       player.communicationCard = null;
       player.communicationRank = CommunicationRank.Unknown;
+      player.intendsToCommunicate = false;
     });
   
     this.state.currentPlayer = "";
