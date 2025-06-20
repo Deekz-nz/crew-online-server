@@ -182,6 +182,7 @@ export class CrewRoom extends Room<CrewGameState> {
         const newTrick = new Trick();
         newTrick.playedCards.push(playedCard);
         newTrick.playerOrder.push(client.sessionId);
+        newTrick.communicationFlags.push(communicationCleared);
         newTrick.trickCompleted = false;
         this.state.currentTrick = newTrick;
     
@@ -208,6 +209,7 @@ export class CrewRoom extends Room<CrewGameState> {
         // Add played card to trick
         trick.playedCards.push(playedCard);
         trick.playerOrder.push(client.sessionId);
+        trick.communicationFlags.push(communicationCleared);
 
         // Now check - is trick finished?
         if (trick.playedCards.length === this.state.playerOrder.length) {
@@ -233,6 +235,36 @@ export class CrewRoom extends Room<CrewGameState> {
         return;
       }
 
+    });
+
+    // Allow player to undo their last played card before the trick finishes
+    this.onMessage("undo_card", (client) => {
+      const trick = this.state.currentTrick;
+      const player = this.state.players.get(client.sessionId);
+
+      if (this.state.currentGameStage !== GameStage.TrickMiddle) return;
+      if (!player) return;
+      if (trick.playerOrder.length === 0) return;
+
+      const lastPlayer = trick.playerOrder[trick.playerOrder.length - 1];
+      if (lastPlayer !== client.sessionId) return;
+
+      const card = trick.playedCards.pop();
+      trick.playerOrder.pop();
+      const flag = trick.communicationFlags.pop();
+
+      if (!card) return;
+
+      player.hand.push(card);
+      if (flag) {
+        player.communicationCard = card;
+      }
+
+      this.state.currentPlayer = client.sessionId;
+
+      if (trick.playedCards.length === 0) {
+        this.state.currentGameStage = GameStage.TrickStart;
+      }
     });
 
     // GameStage = TrickEnd

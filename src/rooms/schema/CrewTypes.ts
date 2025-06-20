@@ -69,6 +69,8 @@ export class Player extends Schema {
 export class Trick extends Schema {
   @type([Card]) playedCards = new ArraySchema<Card>();
   @type(["string"]) playerOrder = new ArraySchema<string>();
+  // Track whether each played card was originally communicated
+  @type(["boolean"]) communicationFlags = new ArraySchema<boolean>();
   @type("string") trickWinner: string;
   @type("boolean") trickCompleted: boolean;
 }
