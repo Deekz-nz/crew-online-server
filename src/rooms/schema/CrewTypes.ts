@@ -60,6 +60,7 @@ export class Player extends Schema {
   @type("boolean") hasCommunicated: boolean = false;
   @type(Card) communicationCard: Card;
   @type("string") communicationRank: CommunicationRank;
+  @type("boolean") intendsToCommunicate: boolean = false;
 
   @type("boolean") isHost: boolean = false;
   @type("boolean") isConnected: boolean = true;
