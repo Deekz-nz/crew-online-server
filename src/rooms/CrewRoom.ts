@@ -6,6 +6,7 @@ import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 import { CrewGameState } from "./schema/CrewRoomState";
 import { Card, CardColor, CommunicationRank, GameStage, Player, PlayerHistory, SimpleTask, Trick } from "./schema/CrewTypes";
+import { ExpansionTask, selectExpansionTasks } from "../expansionTasks";
 
 
 interface JoinOptions {
@@ -20,10 +21,13 @@ interface GameSetupInstructions {
     sequencedTasks: number;
     lastTask: boolean;
   }
+  useExpansion?: boolean;
+  difficultyScore?: number;
 }
 export class CrewRoom extends Room<CrewGameState> {
   private lastActivityTimestamp: number;
   private inactivityInterval: NodeJS.Timeout;
+  private expansionTasks: ExpansionTask[] = [];
   maxClients = 5;
 
   onCreate(options: any) {
@@ -523,7 +527,10 @@ export class CrewRoom extends Room<CrewGameState> {
       console.log("Uh oh, can't find the Black 4 in anyone's hand??!");
     }
 
-    if (gameSetupInstructions.includeTasks) {
+    if (gameSetupInstructions.useExpansion && gameSetupInstructions.difficultyScore !== undefined) {
+      const numPlayers = this.state.playerOrder.length;
+      this.expansionTasks = selectExpansionTasks(gameSetupInstructions.difficultyScore, numPlayers);
+    } else if (gameSetupInstructions.includeTasks) {
       const generatedTasks = this.generateTasks(gameSetupInstructions.taskInstructions);
       this.state.allTasks.push(...generatedTasks);
     }
