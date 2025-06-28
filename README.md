@@ -23,6 +23,33 @@ npm start
         - `npm run loadtest`: runs the [`@colyseus/loadtest`](https://github.com/colyseus/colyseus-loadtest/) tool for testing the connection, using the `loadtest/example.ts` script.
 - `tsconfig.json`: TypeScript configuration file
 
+## HTTP API
+
+### `GET /available_rooms`
+
+Returns a list of active `crew` rooms that are open for players to join. Each
+entry includes the room identifier and current occupancy information.
+
+Example response:
+
+```json
+[
+  {
+    "roomId": "abcd",
+    "clients": 2,
+    "maxClients": 5,
+    "metadata": {}
+  }
+]
+```
+
+The `roomId` from the response can be passed to the Colyseus client when joining
+a room:
+
+```ts
+client.joinById(roomId, { displayName: "My Name" });
+```
+
 
 ## License
 
