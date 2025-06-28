@@ -1,6 +1,7 @@
 import config from "@colyseus/tools";
 import { monitor } from "@colyseus/monitor";
 import { playground } from "@colyseus/playground";
+import { matchMaker } from "colyseus";
 
 /**
  * Import your Room files
@@ -24,6 +25,17 @@ export default config({
          */
         app.get("/hello_world", (req, res) => {
             res.send("It's time to kick ass and chew bubblegum!");
+        });
+
+        // Endpoint to list available rooms
+        app.get("/available_rooms", async (_req, res) => {
+            try {
+                const rooms = await matchMaker.query({ name: "crew" });
+                res.json(rooms);
+            } catch (err) {
+                console.error("failed to get available rooms", err);
+                res.status(500).json({ error: "failed_to_fetch_rooms" });
+            }
         });
 
         /**
