@@ -129,11 +129,35 @@ export class CrewRoom extends Room<CrewGameState> {
       // Save player hands & tasks
       for (const [playerId, player] of this.state.players.entries()) {
         const history = new PlayerHistory();
-        history.cards.push(...player.hand);
-      
+
+        // Store copies of cards so history owns its own instances
+        player.hand.forEach(card => {
+          const cardCopy = new Card();
+          cardCopy.color = card.color;
+          cardCopy.number = card.number;
+          history.cards.push(cardCopy);
+        });
+
         const playerTasks = this.state.allTasks.filter(task => task.player === playerId);
-        history.tasks.push(...playerTasks);
-      
+        // Store copies of tasks (and their cards) to avoid shared references
+        playerTasks.forEach(task => {
+          const cardCopy = new Card();
+          cardCopy.color = task.card.color;
+          cardCopy.number = task.card.number;
+
+          const taskCopy = new SimpleTask();
+          taskCopy.card = cardCopy;
+          taskCopy.player = task.player;
+          taskCopy.taskNumber = task.taskNumber;
+          taskCopy.taskCategory = task.taskCategory;
+          taskCopy.sequenceIndex = task.sequenceIndex;
+          taskCopy.failed = task.failed;
+          taskCopy.completed = task.completed;
+          taskCopy.completedAtTrickIndex = task.completedAtTrickIndex;
+
+          history.tasks.push(taskCopy);
+        });
+
         this.state.historyPlayerStats.set(playerId, history);
       }
 
@@ -233,7 +257,21 @@ export class CrewRoom extends Room<CrewGameState> {
           trick.trickCompleted = true;
           this.state.currentPlayer = winnerId;
           this.state.currentGameStage = GameStage.TrickEnd;
-          this.state.completedTricks.push(trick);
+
+          // Push a copy of the trick so cards aren't shared across schemas
+          const trickCopy = new Trick();
+          trick.playedCards.forEach(card => {
+            const cardCopy = new Card();
+            cardCopy.color = card.color;
+            cardCopy.number = card.number;
+            trickCopy.playedCards.push(cardCopy);
+          });
+          trick.playerOrder.forEach(p => trickCopy.playerOrder.push(p));
+          trick.communicationFlags.forEach(f => trickCopy.communicationFlags.push(f));
+          trickCopy.trickWinner = trick.trickWinner;
+          trickCopy.trickCompleted = trick.trickCompleted;
+          this.state.completedTricks.push(trickCopy);
+
           // Evaluate this trick for tasks
           this.evaluateTrickForTasks(trick);
         } else {
