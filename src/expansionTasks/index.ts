@@ -4,6 +4,7 @@ import { simpleTasks } from "./taskSetSimple";
 import { winCountTasks } from "./taskSetWinCount";
 import { specificWinTasks } from "./taskSetSpecificWins";
 import { relativeWinTasks } from "./taskSetRelativeWins";
+import { dontWinTasks } from "./taskSetDontWin";
 
 export function getAllExpansionTasks(): ExpansionTaskDefinition[] {
   return [
@@ -11,8 +12,8 @@ export function getAllExpansionTasks(): ExpansionTaskDefinition[] {
     ...winCountTasks,
     ...specificWinTasks,
     ...relativeWinTasks,
+    ...dontWinTasks,
   ];
-}
 
 export function shuffle<T>(arr: T[]): void {
   for (let i = arr.length - 1; i > 0; i--) {
