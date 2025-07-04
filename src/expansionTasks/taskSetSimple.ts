@@ -81,7 +81,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
   },
   {
     id: "simple_green3_yellow4_yellow5",
-    displayName: "Green 3 & Yellow 4,5",
+    displayName: "Green 3, Yellow 4 and Yellow 5",
     description: "the green 3 and the yellow 4 and the yellow 5",
     difficultyFor3: 3,
     difficultyFor4: 4,
