@@ -717,6 +717,7 @@ export class CrewRoom extends Room<CrewGameState> {
       newTask.displayName = taskDef.displayName;
       newTask.description = taskDef.description;
       newTask.evaluationDescription = taskDef.evaluationDescription;
+      newTask.difficulty = numPlayers === 3 ? taskDef.difficultyFor3 : (numPlayers === 4 ? taskDef.difficultyFor4 : taskDef.difficultyFor5)
       return newTask;
     })
 

@@ -58,6 +58,7 @@ export class ExpansionTask extends BaseTask {
   @type("string") displayName: string;
   @type("string") description: string;
   @type("string") evaluationDescription: string;
+  @type("number") difficulty: number;
 }
 
 // === Define Player ===
