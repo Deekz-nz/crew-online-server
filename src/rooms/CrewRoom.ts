@@ -21,8 +21,8 @@ interface GameSetupInstructions {
     sequencedTasks: number;
     lastTask: boolean;
   }
-  useExpansion?: boolean;
-  difficultyScore?: number;
+  useExpansion: boolean;
+  difficultyScore: number;
 }
 export class CrewRoom extends Room<CrewGameState> {
   private lastActivityTimestamp: number;
