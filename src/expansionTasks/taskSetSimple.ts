@@ -37,7 +37,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 2,
     difficultyFor4: 2,
     difficultyFor5: 3,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won tricks that contain the PINK 5 and YELLOW 6",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -52,7 +52,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 2,
     difficultyFor4: 3,
     difficultyFor5: 3,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won tricks that contain the YELLOW 9 and BLUE 7",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -67,7 +67,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 2,
     difficultyFor4: 2,
     difficultyFor5: 2,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the PINK 1 and the GREEN 7 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -82,7 +82,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 2,
     difficultyFor4: 2,
     difficultyFor5: 3,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the GREEN 5 and the BLUE 8 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -97,7 +97,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 2,
     difficultyFor4: 3,
     difficultyFor5: 3,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the BLUE 1, the BLUE 2 and the BLUE 3 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -113,7 +113,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 3,
     difficultyFor4: 4,
     difficultyFor5: 4,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the GREEN 3, YELLOW 4 and the YELLOW 5 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -129,7 +129,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 2,
     difficultyFor4: 2,
     difficultyFor5: 3,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the BLUE 6 and YELLOW 7 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -144,7 +144,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 2,
     difficultyFor4: 2,
     difficultyFor5: 3,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the PINK 8 and the BLUE 5 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -159,7 +159,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 2,
     difficultyFor4: 3,
     difficultyFor5: 3,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the PINK 9 and the YELLOW 8 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -174,7 +174,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 1,
     difficultyFor4: 1,
     difficultyFor5: 1,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the BLUE 4 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -188,7 +188,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 1,
     difficultyFor4: 1,
     difficultyFor5: 1,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the BLACK 3 in any of their tricks",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -202,7 +202,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 1,
     difficultyFor4: 1,
     difficultyFor5: 1,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the YELLOW 1 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -216,7 +216,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 1,
     difficultyFor4: 1,
     difficultyFor5: 1,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the GREEN 6 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
@@ -230,7 +230,7 @@ export const simpleTasks: ExpansionTaskDefinition[] = [
     difficultyFor3: 1,
     difficultyFor4: 1,
     difficultyFor5: 1,
-    canEvaluateMidGame: true,
+    evaluateMidGame: true,
     evaluationDescription: "Current player has won the PINK 3 in any of the tricks that they won",
     evaluate: (tricks, playerId) =>
       evaluateCollectCards(tricks, playerId, [
