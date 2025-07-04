@@ -1,9 +1,10 @@
 import { ExpansionTaskDefinition } from "./types";
 export { ExpansionTaskDefinition, TaskState } from "./types";
 import { simpleTasks } from "./taskSetSimple";
+import { winCountTasks } from "./taskSetWinCount";
 
 export function getAllExpansionTasks(): ExpansionTaskDefinition[] {
-  return [...simpleTasks];
+  return [...simpleTasks, ...winCountTasks];
 }
 
 export function shuffle<T>(arr: T[]): void {
