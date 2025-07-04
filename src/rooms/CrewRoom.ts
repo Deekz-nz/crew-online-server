@@ -482,6 +482,26 @@ export class CrewRoom extends Room<CrewGameState> {
       this.state.currentGameStage = GameStage.GameEnd;
     });
 
+    /* ================================================================
+      "Send Emoji" handler
+      --------------------------------------------------------------- */
+    this.onMessage("send_emoji", (client, emoji: string) => {
+      if (typeof emoji !== "string" || emoji.trim().length === 0) return;
+
+      this.updateActivity();
+
+      // prepare the payload
+      const payload = {
+        from: client.sessionId,                 // sender’s unique id
+        name: getPlayerDisplayName(this.state, client.sessionId),
+        emoji,                                  // raw string the client sent
+        sentAt: Date.now(),                     // useful for animations / ordering
+      };
+
+      // broadcast to everyone (including the sender)
+      this.broadcast("player_emoji", payload);
+    });
+
   }
 
   // Helper method for inactivity
@@ -1031,4 +1051,9 @@ export class CrewRoom extends Room<CrewGameState> {
 
 function isExpansionTask(task: BaseTask): task is ExpansionTask {
   return (task as ExpansionTask).displayName !== undefined;
+}
+
+function getPlayerDisplayName(state: CrewGameState, sessionId: string): string {
+  // adapt to your actual player map / schema
+  return state.players.get(sessionId)?.displayName ?? "Unknown";
 }
