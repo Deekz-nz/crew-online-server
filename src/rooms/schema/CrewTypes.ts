@@ -33,21 +33,24 @@ export class Card extends Schema {
   @type("number") number!: number; // 1 - 9
 }
 
-export class SimpleTask extends Schema {
-  @type(Card) card: Card;
+export class BaseTask extends Schema {
+  @type("string") taskId: string;
   @type("string") player: string;
+  @type("boolean") failed: boolean = false;
+  @type("boolean") completed: boolean = false;
+
+  // Optional metadata for tracking when this task was completed
+  @type("number") completedAtTrickIndex?: number;
+}
+
+export class SimpleTask extends BaseTask {
+  @type(Card) card: Card;
   @type("number") taskNumber: number;
 
   @type("string") taskCategory: TaskCategory;
 
   // Only used for ordered/sequence tasks
   @type("number") sequenceIndex: number; // 0-based index in order
-
-  @type("boolean") failed: boolean = false;
-  @type("boolean") completed: boolean = false;
-
-  // Optional metadata for tracking when this task was completed
-  @type("number") completedAtTrickIndex?: number;
 }
 
 
