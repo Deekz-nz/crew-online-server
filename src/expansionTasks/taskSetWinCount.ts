@@ -1,42 +1,11 @@
-import { CardColor, Trick } from "../rooms/schema/CrewTypes";
+import { CardColor } from "../rooms/schema/CrewTypes";
 import { ExpansionTaskDefinition, TaskState } from "./types";
-
-function getExpectedTrickCount(numPlayers: number): number {
-  switch (numPlayers) {
-    case 3:
-      return 13;
-    case 4:
-      return 10;
-    default:
-      return 8;
-  }
-}
-
-function getNumPlayers(tricks: Trick[]): number {
-  if (tricks.length === 0) return 0;
-  return tricks[0].playerOrder.length;
-}
-
-function countWins(tricks: Trick[], playerId: string): number {
-  return tricks.filter(t => t.trickWinner === playerId).length;
-}
-
-function hasConsecutiveWins(
-  tricks: Trick[],
-  playerId: string,
-  required: number
-): boolean {
-  let current = 0;
-  for (const trick of tricks) {
-    if (trick.trickWinner === playerId) {
-      current += 1;
-      if (current >= required) return true;
-    } else {
-      current = 0;
-    }
-  }
-  return false;
-}
+import {
+  getExpectedTrickCount,
+  getNumPlayers,
+  countWins,
+  hasConsecutiveWins,
+} from "./taskHelpers";
 
 export const winCountTasks: ExpansionTaskDefinition[] = [
   {
