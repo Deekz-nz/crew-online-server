@@ -1,10 +1,4 @@
-export enum TaskState {
-  COMPLETED = "completed",
-  FAILED = "failed",
-  IN_PROGRESS = "in_progress"
-}
-
-import { Trick } from "../rooms/schema/CrewTypes";
+import { Trick, TaskState } from "../rooms/schema/CrewTypes";
 
 export interface ExpansionTask {
   id: string;
