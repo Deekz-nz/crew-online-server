@@ -1,11 +1,9 @@
 import { ExpansionTaskDefinition } from "./types";
 export { ExpansionTaskDefinition, TaskState } from "./types";
-import { basicTasks } from "./taskSetBasic";
-import { extraTasks } from "./taskSetExtra";
 import { simpleTasks } from "./taskSetSimple";
 
 export function getAllExpansionTasks(): ExpansionTaskDefinition[] {
-  return [...basicTasks, ...extraTasks, ...simpleTasks];
+  return [...simpleTasks];
 }
 
 export function shuffle<T>(arr: T[]): void {
