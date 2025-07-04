@@ -59,6 +59,7 @@ export class ExpansionTask extends BaseTask {
   @type("string") description: string;
   @type("string") evaluationDescription: string;
   @type("number") difficulty: number;
+  @type(["string"]) interestedPlayers = new ArraySchema<string>();
 }
 
 // === Define Player ===

@@ -80,6 +80,36 @@ export class CrewRoom extends Room<CrewGameState> {
     })
 
     // GameStage = GameSetup
+    this.onMessage("register_interest_in_task", (client, taskData: BaseTask) => {
+      if (this.state.currentGameStage !== GameStage.GameSetup) return;
+
+      const task = this.state.allTasks.find(t => this.isSameTask(t, taskData));
+      if (!task || !isExpansionTask(task)) return; // bail out if not an ExpansionTask
+
+      this.updateActivity();
+
+      // don’t add the same player twice
+      if (!task.interestedPlayers.includes(client.sessionId)) {
+        task.interestedPlayers.push(client.sessionId);
+      }
+    });
+
+    // GameStage = GameSetup
+    this.onMessage("cancel_interest_in_task", (client, taskData: BaseTask) => {
+      if (this.state.currentGameStage !== GameStage.GameSetup) return;
+
+      const task = this.state.allTasks.find(t => this.isSameTask(t, taskData));
+      if (!task || !isExpansionTask(task)) return; // nothing to do
+
+      this.updateActivity();
+
+      const idx = task.interestedPlayers.findIndex(id => id === client.sessionId);
+      if (idx !== -1) {
+        task.interestedPlayers.splice(idx, 1); // ArraySchema supports splice()
+      }
+    });
+
+    // GameStage = GameSetup
     this.onMessage("take_task", (client, taskData: BaseTask) => {
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
     
@@ -997,4 +1027,8 @@ export class CrewRoom extends Room<CrewGameState> {
   }
   
   
+}
+
+function isExpansionTask(task: BaseTask): task is ExpansionTask {
+  return (task as ExpansionTask).displayName !== undefined;
 }
