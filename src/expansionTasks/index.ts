@@ -3,9 +3,15 @@ export { ExpansionTaskDefinition, TaskState } from "./types";
 import { simpleTasks } from "./taskSetSimple";
 import { winCountTasks } from "./taskSetWinCount";
 import { specificWinTasks } from "./taskSetSpecificWins";
+import { relativeWinTasks } from "./taskSetRelativeWins";
 
 export function getAllExpansionTasks(): ExpansionTaskDefinition[] {
-  return [...simpleTasks, ...winCountTasks, ...specificWinTasks];
+  return [
+    ...simpleTasks,
+    ...winCountTasks,
+    ...specificWinTasks,
+    ...relativeWinTasks,
+  ];
 }
 
 export function shuffle<T>(arr: T[]): void {
