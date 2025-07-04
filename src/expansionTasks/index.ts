@@ -6,6 +6,7 @@ import { specificWinTasks } from "./taskSetSpecificWins";
 import { relativeWinTasks } from "./taskSetRelativeWins";
 import { dontWinTasks } from "./taskSetDontWin";
 import { exactCountTasks } from "./taskSetExactCounts";
+import { miscTasks } from "./taskSetMisc";
 
 export function getAllExpansionTasks(): ExpansionTaskDefinition[] {
   return [
@@ -15,6 +16,7 @@ export function getAllExpansionTasks(): ExpansionTaskDefinition[] {
     ...relativeWinTasks,
     ...dontWinTasks,
     ...exactCountTasks,
+    ...miscTasks,
   ];
 }
 

@@ -1,33 +1,6 @@
-import { CardColor, Trick } from "../rooms/schema/CrewTypes";
+import { CardColor } from "../rooms/schema/CrewTypes";
 import { ExpansionTaskDefinition, TaskState } from "./types";
-
-function evaluateCollectCards(
-  tricks: Trick[],
-  playerId: string,
-  cards: { color: CardColor; number: number }[]
-): TaskState {
-  const found: Record<string, boolean> = {};
-  cards.forEach(c => {
-    found[`${c.color}_${c.number}`] = false;
-  });
-
-  for (const trick of tricks) {
-    for (const card of trick.playedCards) {
-      for (const req of cards) {
-        if (card.color === req.color && card.number === req.number) {
-          if (trick.trickWinner === playerId) {
-            found[`${req.color}_${req.number}`] = true;
-          } else {
-            return TaskState.FAILED;
-          }
-        }
-      }
-    }
-  }
-
-  const allFound = Object.values(found).every(v => v);
-  return allFound ? TaskState.COMPLETED : TaskState.IN_PROGRESS;
-}
+import { evaluateCollectCards } from "./taskHelpers";
 
 export const simpleTasks: ExpansionTaskDefinition[] = [
   {
