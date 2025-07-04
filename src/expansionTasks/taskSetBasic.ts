@@ -1,4 +1,5 @@
-import { ExpansionTask, TaskState } from "./types";
+import { ExpansionTask } from "./types";
+import { TaskState } from "../rooms/schema/CrewTypes";
 
 export const basicTasks: ExpansionTask[] = [
   {

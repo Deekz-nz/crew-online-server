@@ -1,5 +1,6 @@
 import { ExpansionTask } from "./types";
-export { ExpansionTask, TaskState } from "./types";
+export { ExpansionTask } from "./types";
+export { TaskState } from "../rooms/schema/CrewTypes";
 import { basicTasks } from "./taskSetBasic";
 import { extraTasks } from "./taskSetExtra";
 
@@ -16,7 +17,7 @@ export function shuffle<T>(arr: T[]): void {
 
 export function selectExpansionTasks(
   desiredDifficulty: number,
-  numPlayers: number
+  numPlayers: number,
 ): ExpansionTask[] {
   const tasks = getAllExpansionTasks().slice();
   shuffle(tasks);

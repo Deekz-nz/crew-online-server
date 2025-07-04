@@ -1,5 +1,13 @@
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
-import { Card, GameStage, Player, PlayerHistory, SimpleTask, Trick } from "./CrewTypes";
+import {
+  Card,
+  GameStage,
+  Player,
+  PlayerHistory,
+  SimpleTask,
+  Trick,
+  ExpansionTaskState,
+} from "./CrewTypes";
 
 // === Define Room State ===
 export class CrewGameState extends Schema {
@@ -10,7 +18,7 @@ export class CrewGameState extends Schema {
   @type(["string"]) playerOrder = new ArraySchema<string>();
   @type("string") currentPlayer: string = "";
   @type("string") commanderPlayer: string = "";
-  
+
   @type(Trick) currentTrick: Trick;
   @type([Trick]) completedTricks = new ArraySchema<Trick>();
   @type("number") expectedTrickCount: number = 0;
@@ -19,9 +27,15 @@ export class CrewGameState extends Schema {
   @type("number") completedTaskCount: number = 0;
   @type("number") completedSequenceTaskCount: number = 0;
 
+  @type([ExpansionTaskState]) expansionTasks =
+    new ArraySchema<ExpansionTaskState>();
+  @type("boolean") isExpansionGame: boolean = false;
+  @type("number") expansionDifficulty: number = 0;
+
   @type("boolean") gameFinished: boolean = false;
   @type("boolean") gameSucceeded: boolean = false;
   @type("string") currentGameStage: GameStage = GameStage.NotStarted;
 
-  @type({ map: PlayerHistory }) historyPlayerStats = new MapSchema<PlayerHistory>();
+  @type({ map: PlayerHistory }) historyPlayerStats =
+    new MapSchema<PlayerHistory>();
 }

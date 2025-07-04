@@ -15,17 +15,23 @@ export enum GameStage {
   TrickStart = "trick_start",
   TrickMiddle = "trick_middle",
   TrickEnd = "trick_end",
-  GameEnd = "game_end"
+  GameEnd = "game_end",
 }
 
 export enum CommunicationRank {
   Highest = "highest",
   Lowest = "lowest",
   Only = "only",
-  Unknown = "unknown"
+  Unknown = "unknown",
 }
 
 export type TaskCategory = "ordered" | "plain" | "sequence" | "must_be_last";
+
+export enum TaskState {
+  COMPLETED = "completed",
+  FAILED = "failed",
+  IN_PROGRESS = "in_progress",
+}
 
 // === Define Card ===
 export class Card extends Schema {
@@ -50,6 +56,18 @@ export class SimpleTask extends Schema {
   @type("number") completedAtTrickIndex?: number;
 }
 
+export class ExpansionTaskState extends Schema {
+  @type("string") id: string;
+  @type("string") displayName: string;
+  @type("string") description: string;
+  @type("number") difficultyFor3: number;
+  @type("number") difficultyFor4: number;
+  @type("number") difficultyFor5: number;
+  @type("boolean") canEvaluateMidGame: boolean;
+  @type("string") evaluationDescription: string;
+  @type("string") taskState: TaskState = TaskState.IN_PROGRESS;
+  @type("string") player: string = "";
+}
 
 // === Define Player ===
 export class Player extends Schema {
@@ -80,4 +98,6 @@ export class Trick extends Schema {
 export class PlayerHistory extends Schema {
   @type([Card]) cards = new ArraySchema<Card>();
   @type([SimpleTask]) tasks = new ArraySchema<SimpleTask>();
+  @type([ExpansionTaskState]) expansionTasks =
+    new ArraySchema<ExpansionTaskState>();
 }

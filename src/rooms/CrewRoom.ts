@@ -5,9 +5,19 @@
 import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 import { CrewGameState } from "./schema/CrewRoomState";
-import { Card, CardColor, CommunicationRank, GameStage, Player, PlayerHistory, SimpleTask, Trick } from "./schema/CrewTypes";
+import {
+  Card,
+  CardColor,
+  CommunicationRank,
+  GameStage,
+  Player,
+  PlayerHistory,
+  SimpleTask,
+  Trick,
+  ExpansionTaskState,
+  TaskState,
+} from "./schema/CrewTypes";
 import { ExpansionTask, selectExpansionTasks } from "../expansionTasks";
-
 
 interface JoinOptions {
   displayName: string;
@@ -20,7 +30,7 @@ interface GameSetupInstructions {
     orderedTasks: number;
     sequencedTasks: number;
     lastTask: boolean;
-  }
+  };
   useExpansion?: boolean;
   difficultyScore?: number;
 }
@@ -52,77 +62,102 @@ export class CrewRoom extends Room<CrewGameState> {
         // TODO: Implement frontend handling of this message
         this.broadcast("room_closed", { reason: "inactivity_timeout" });
 
-        setTimeout(() => {  
-            this.disconnect();
-        }, 1000); // delay to allow message delivery 
+        setTimeout(() => {
+          this.disconnect();
+        }, 1000); // delay to allow message delivery
       }
     }, 60 * 1000); // Check every minute
 
     // GameStage = NotStarted
-    this.onMessage("start_game", (client, gameSetupInstructions: GameSetupInstructions) => {
-      const player = this.state.players.get(client.sessionId);
-      
-      // Check current game stage is "not started"
-      if (this.state.currentGameStage != GameStage.NotStarted) return;
+    this.onMessage(
+      "start_game",
+      (client, gameSetupInstructions: GameSetupInstructions) => {
+        const player = this.state.players.get(client.sessionId);
 
-      // Check there is at least 3 players registered
-      if (this.state.players.size <= 2) return;
+        // Check current game stage is "not started"
+        if (this.state.currentGameStage != GameStage.NotStarted) return;
 
-      // Check if player is host
-      if (!player?.isHost) return;
+        // Check there is at least 3 players registered
+        if (this.state.players.size <= 2) return;
 
-      // Update inactive timer
-      this.updateActivity();
+        // Check if player is host
+        if (!player?.isHost) return;
 
-      // Start the game
-      this.startGame(gameSetupInstructions);
+        // Update inactive timer
+        this.updateActivity();
 
-    })
+        // Start the game
+        this.startGame(gameSetupInstructions);
+      },
+    );
 
     // GameStage = GameSetup
-    this.onMessage("take_task", (client, taskData: SimpleTask) => {
+    this.onMessage("take_task", (client, taskData: any) => {
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
-    
-      const task = this.state.allTasks.find(t => this.isSameTask(t, taskData)); // find matching task
+
+      if (this.state.isExpansionGame) {
+        const task = this.state.expansionTasks.find(
+          (t) => t.id === taskData.id,
+        );
+        if (!task || task.player !== "") return;
+        this.updateActivity();
+        task.player = client.sessionId;
+        return;
+      }
+
+      const task = this.state.allTasks.find((t) =>
+        this.isSameTask(t, taskData),
+      ); // find matching task
       if (!task) return;
-    
-      // Task already taken
+
       if (task.player !== "") return;
-      
-      // Update inactive timer
+
       this.updateActivity();
-    
-      // Assign task to player
       task.player = client.sessionId;
     });
-    
 
     // GameStage = GameSetup
-    this.onMessage("return_task", (client, taskData: SimpleTask) => {
+    this.onMessage("return_task", (client, taskData: any) => {
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
-    
-      const task = this.state.allTasks.find(t => this.isSameTask(t, taskData)); // find matching task
-      if (!task) return;
-    
-      // Can only return your own task
-      if (task.player !== client.sessionId) return;
-    
-      // Update inactive timer
-      this.updateActivity();
 
-      // Return task
+      if (this.state.isExpansionGame) {
+        const task = this.state.expansionTasks.find(
+          (t) => t.id === taskData.id,
+        );
+        if (!task || task.player !== client.sessionId) return;
+        this.updateActivity();
+        task.player = "";
+        return;
+      }
+
+      const task = this.state.allTasks.find((t) =>
+        this.isSameTask(t, taskData),
+      ); // find matching task
+      if (!task) return;
+
+      if (task.player !== client.sessionId) return;
+
+      this.updateActivity();
       task.player = "";
     });
-    
 
     // GameStage = GameSetup
     this.onMessage("finish_task_allocation", (client) => {
       this.updateActivity();
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
-    
-      const unassignedTasks = this.state.allTasks.filter(task => task.player === "");
-      if (unassignedTasks.length > 0) return; // Not all tasks taken
-    
+
+      if (this.state.isExpansionGame) {
+        const unassigned = this.state.expansionTasks.filter(
+          (t) => t.player === "",
+        );
+        if (unassigned.length > 0) return;
+      } else {
+        const unassignedTasks = this.state.allTasks.filter(
+          (task) => task.player === "",
+        );
+        if (unassignedTasks.length > 0) return; // Not all tasks taken
+      }
+
       // Update inactive timer
       this.updateActivity();
 
@@ -158,6 +193,24 @@ export class CrewRoom extends Room<CrewGameState> {
           history.tasks.push(taskCopy);
         });
 
+        if (this.state.isExpansionGame) {
+          const expansionPlayerTasks = this.state.expansionTasks.filter(task => task.player === playerId);
+          expansionPlayerTasks.forEach(task => {
+            const taskCopy = new ExpansionTaskState();
+            taskCopy.id = task.id;
+            taskCopy.displayName = task.displayName;
+            taskCopy.description = task.description;
+            taskCopy.difficultyFor3 = task.difficultyFor3;
+            taskCopy.difficultyFor4 = task.difficultyFor4;
+            taskCopy.difficultyFor5 = task.difficultyFor5;
+            taskCopy.canEvaluateMidGame = task.canEvaluateMidGame;
+            taskCopy.evaluationDescription = task.evaluationDescription;
+            taskCopy.taskState = task.taskState;
+            taskCopy.player = task.player;
+
+            history.expansionTasks.push(taskCopy);
+          })
+        }
         this.state.historyPlayerStats.set(playerId, history);
       }
 
@@ -165,130 +218,145 @@ export class CrewRoom extends Room<CrewGameState> {
       this.state.currentTrick = newTrick;
       this.state.currentGameStage = GameStage.TrickStart;
     });
-    
 
     // GameStage = TrickStart or TrickMiddle
-    this.onMessage("play_card", (client, cardData: { color: CardColor; number: number }) => {
-      this.updateActivity();
-      const player = this.state.players.get(client.sessionId);
-      if (!player) return;
+    this.onMessage(
+      "play_card",
+      (client, cardData: { color: CardColor; number: number }) => {
+        this.updateActivity();
+        const player = this.state.players.get(client.sessionId);
+        if (!player) return;
 
-      const intentionExists = Array.from(this.state.players.values()).some(p => p.intendsToCommunicate);
-      if (intentionExists) {
-        // Clear flag if the player themselves had the intention and decided to play anyway
-        if (player.intendsToCommunicate) {
-          player.intendsToCommunicate = false;
-        } else {
-          return;
-        }
-      }
-      // Check GameStage
-      if (this.state.currentGameStage !== GameStage.TrickStart && this.state.currentGameStage !== GameStage.TrickMiddle) return;
-
-      // Check that it is actually this person's turn
-      if (this.state.currentPlayer !== client.sessionId) return;
-
-      // Find and remove the card from player's hand
-      const cardIndex = player.hand.findIndex(
-        (card) => card.color === cardData.color && card.number === cardData.number
-      );
-      if (cardIndex === -1) return; // Card not found
-
-      // Remove card from player's hand
-      const [playedCard] = player.hand.splice(cardIndex, 1);
-
-      // Check if this card was communicated — track whether we cleared it in case we revert
-      let communicationCleared = false;
-      if (
-        player.hasCommunicated &&
-        player.communicationCard &&
-        player.communicationCard.color === playedCard.color &&
-        player.communicationCard.number === playedCard.number
-      ) {
-        player.communicationCard = null; // Reset to null
-        player.communicationRank = CommunicationRank.Unknown;
-        communicationCleared = true;
-      }
-
-      const trick = this.state.currentTrick;
-      
-      // Update inactive timer
-      this.updateActivity();
-
-      if (this.state.currentGameStage === GameStage.TrickStart) {
-        // === First card of the trick ===  
-        // Update state
-        const newTrick = new Trick();
-        newTrick.playedCards.push(playedCard);
-        newTrick.playerOrder.push(client.sessionId);
-        newTrick.communicationFlags.push(communicationCleared);
-        newTrick.trickCompleted = false;
-        this.state.currentTrick = newTrick;
-    
-        // Advance game stage to TrickMiddle
-        this.state.currentGameStage = GameStage.TrickMiddle;
-        this.state.currentPlayer = this.getNextPlayer(client.sessionId);
-      } else if (this.state.currentGameStage === GameStage.TrickMiddle) {
-        // It's NOT the first card, so we have to make sure the player isn't re-negging
-        // i.e. if the first card in the trick was a blue, and the player is NOT playing a blue, then check to make sure they have no blues
-        const leadCard = trick.playedCards[0];
-
-        if (playedCard.color !== leadCard.color) {
-          const hasLeadColor = player.hand.some((card) => card.color === leadCard.color);
-          if (hasLeadColor) {
-            // Player is re-negging — revert card removal and ignore play
-            player.hand.push(playedCard); // Add card back to hand
-            if (communicationCleared) { // Restore communication
-              player.hasCommunicated = true;
-              player.communicationCard = playedCard;
-            }
+        const intentionExists = Array.from(this.state.players.values()).some(
+          (p) => p.intendsToCommunicate,
+        );
+        if (intentionExists) {
+          // Clear flag if the player themselves had the intention and decided to play anyway
+          if (player.intendsToCommunicate) {
+            player.intendsToCommunicate = false;
+          } else {
             return;
           }
         }
-        // Add played card to trick
-        trick.playedCards.push(playedCard);
-        trick.playerOrder.push(client.sessionId);
-        trick.communicationFlags.push(communicationCleared);
+        // Check GameStage
+        if (
+          this.state.currentGameStage !== GameStage.TrickStart &&
+          this.state.currentGameStage !== GameStage.TrickMiddle
+        )
+          return;
 
-        // Now check - is trick finished?
-        if (trick.playedCards.length === this.state.playerOrder.length) {
-          const winnerId = this.determineTrickWinner(trick);
-          trick.trickWinner = winnerId;
-          trick.trickCompleted = true;
-          this.state.currentPlayer = winnerId;
-          this.state.currentGameStage = GameStage.TrickEnd;
+        // Check that it is actually this person's turn
+        if (this.state.currentPlayer !== client.sessionId) return;
 
-          // Push a copy of the trick so cards aren't shared across schemas
-          const trickCopy = new Trick();
-          trick.playedCards.forEach(card => {
-            const cardCopy = new Card();
-            cardCopy.color = card.color;
-            cardCopy.number = card.number;
-            trickCopy.playedCards.push(cardCopy);
-          });
-          trick.playerOrder.forEach(p => trickCopy.playerOrder.push(p));
-          trick.communicationFlags.forEach(f => trickCopy.communicationFlags.push(f));
-          trickCopy.trickWinner = trick.trickWinner;
-          trickCopy.trickCompleted = trick.trickCompleted;
-          this.state.completedTricks.push(trickCopy);
+        // Find and remove the card from player's hand
+        const cardIndex = player.hand.findIndex(
+          (card) =>
+            card.color === cardData.color && card.number === cardData.number,
+        );
+        if (cardIndex === -1) return; // Card not found
 
-          // Evaluate this trick for tasks
-          this.evaluateTrickForTasks(trick);
-        } else {
-          // Trick still going - move to next player
+        // Remove card from player's hand
+        const [playedCard] = player.hand.splice(cardIndex, 1);
+
+        // Check if this card was communicated — track whether we cleared it in case we revert
+        let communicationCleared = false;
+        if (
+          player.hasCommunicated &&
+          player.communicationCard &&
+          player.communicationCard.color === playedCard.color &&
+          player.communicationCard.number === playedCard.number
+        ) {
+          player.communicationCard = null; // Reset to null
+          player.communicationRank = CommunicationRank.Unknown;
+          communicationCleared = true;
+        }
+
+        const trick = this.state.currentTrick;
+
+        // Update inactive timer
+        this.updateActivity();
+
+        if (this.state.currentGameStage === GameStage.TrickStart) {
+          // === First card of the trick ===
+          // Update state
+          const newTrick = new Trick();
+          newTrick.playedCards.push(playedCard);
+          newTrick.playerOrder.push(client.sessionId);
+          newTrick.communicationFlags.push(communicationCleared);
+          newTrick.trickCompleted = false;
+          this.state.currentTrick = newTrick;
+
+          // Advance game stage to TrickMiddle
+          this.state.currentGameStage = GameStage.TrickMiddle;
           this.state.currentPlayer = this.getNextPlayer(client.sessionId);
-        }
-      } else {
-        // Invalid game stage - put card back
-        player.hand.push(playedCard); // Add card back to hand
-        if (communicationCleared) { // Restore communication
-          player.hasCommunicated = true;
-          player.communicationCard = playedCard;
-        }
-        return;
-      }
+        } else if (this.state.currentGameStage === GameStage.TrickMiddle) {
+          // It's NOT the first card, so we have to make sure the player isn't re-negging
+          // i.e. if the first card in the trick was a blue, and the player is NOT playing a blue, then check to make sure they have no blues
+          const leadCard = trick.playedCards[0];
 
-    });
+          if (playedCard.color !== leadCard.color) {
+            const hasLeadColor = player.hand.some(
+              (card) => card.color === leadCard.color,
+            );
+            if (hasLeadColor) {
+              // Player is re-negging — revert card removal and ignore play
+              player.hand.push(playedCard); // Add card back to hand
+              if (communicationCleared) {
+                // Restore communication
+                player.hasCommunicated = true;
+                player.communicationCard = playedCard;
+              }
+              return;
+            }
+          }
+          // Add played card to trick
+          trick.playedCards.push(playedCard);
+          trick.playerOrder.push(client.sessionId);
+          trick.communicationFlags.push(communicationCleared);
+
+          // Now check - is trick finished?
+          if (trick.playedCards.length === this.state.playerOrder.length) {
+            const winnerId = this.determineTrickWinner(trick);
+            trick.trickWinner = winnerId;
+            trick.trickCompleted = true;
+            this.state.currentPlayer = winnerId;
+            this.state.currentGameStage = GameStage.TrickEnd;
+
+            // Push a copy of the trick so cards aren't shared across schemas
+            const trickCopy = new Trick();
+            trick.playedCards.forEach(card => {
+              const cardCopy = new Card();
+              cardCopy.color = card.color;
+              cardCopy.number = card.number;
+              trickCopy.playedCards.push(cardCopy);
+            });
+            trick.playerOrder.forEach(p => trickCopy.playerOrder.push(p));
+            trick.communicationFlags.forEach(f => trickCopy.communicationFlags.push(f));
+            trickCopy.trickWinner = trick.trickWinner;
+            trickCopy.trickCompleted = trick.trickCompleted;
+            this.state.completedTricks.push(trickCopy);
+            // Evaluate tasks based on game type
+            if (this.state.isExpansionGame) {
+              this.evaluateTricksForExpansionTasks();
+            } else {
+              this.evaluateTrickForTasks(trick);
+            }
+          } else {
+            // Trick still going - move to next player
+            this.state.currentPlayer = this.getNextPlayer(client.sessionId);
+          }
+        } else {
+          // Invalid game stage - put card back
+          player.hand.push(playedCard); // Add card back to hand
+          if (communicationCleared) {
+            // Restore communication
+            player.hasCommunicated = true;
+            player.communicationCard = playedCard;
+          }
+          return;
+        }
+      },
+    );
 
     // Allow player to undo their last played card before the trick finishes
     this.onMessage("undo_card", (client) => {
@@ -323,7 +391,7 @@ export class CrewRoom extends Room<CrewGameState> {
     // GameStage = TrickEnd
     this.onMessage("finish_trick", (client) => {
       const player = this.state.players.get(client.sessionId);
-      
+
       // Check current game stage is "TrickEnd"
       if (this.state.currentGameStage != GameStage.TrickEnd) return;
 
@@ -332,13 +400,13 @@ export class CrewRoom extends Room<CrewGameState> {
 
       // Update inactive timer
       this.updateActivity();
-      
+
       const tricksPlayed = this.state.completedTricks.length;
 
       if (tricksPlayed >= this.state.expectedTrickCount) {
         // All tricks played: count how many each player won
         const trickWins = new Map<string, number>(); // sessionId -> win count
-    
+
         for (const trick of this.state.completedTricks) {
           const winnerId = trick.trickWinner;
           if (winnerId) {
@@ -348,16 +416,28 @@ export class CrewRoom extends Room<CrewGameState> {
         this.state.currentGameStage = GameStage.GameEnd;
         this.state.currentTrick = new Trick();
         this.state.gameFinished = true;
-        
+
         // Check task success
-        const allTasksCompleted = this.state.allTasks.every(task => task.completed);
-        const noTasksFailed = this.state.allTasks.every(task => !task.failed);
-        
+        let allTasksCompleted = true;
+        let noTasksFailed = true;
+        if (this.state.isExpansionGame) {
+          allTasksCompleted = this.state.expansionTasks.every(
+            (t) => t.taskState === TaskState.COMPLETED,
+          );
+          noTasksFailed = this.state.expansionTasks.every(
+            (t) => t.taskState !== TaskState.FAILED,
+          );
+        } else {
+          allTasksCompleted = this.state.allTasks.every(
+            (task) => task.completed,
+          );
+          noTasksFailed = this.state.allTasks.every((task) => !task.failed);
+        }
+
         // Set success flag
         this.state.gameSucceeded = allTasksCompleted && noTasksFailed;
-        
+
         console.log("Game finished. Success:", this.state.gameSucceeded);
-    
       } else {
         // More tricks to play: reset for next trick
         this.state.currentTrick = new Trick();
@@ -382,41 +462,49 @@ export class CrewRoom extends Room<CrewGameState> {
     });
 
     //GameStage = TrickEnd or TrickStart
-    this.onMessage("communicate", (client, details: { card: Card; cardRank: CommunicationRank }) => {
-      const player = this.state.players.get(client.sessionId);
-    
-      // Validate game stage
-      if (this.state.currentGameStage !== GameStage.TrickStart && this.state.currentGameStage !== GameStage.TrickEnd) return;
-    
-      // Check if player already communicated
-      if (player.hasCommunicated) return;
-    
-      // Validate communication
-      if (!this.isValidCommunication(player, details.card, details.cardRank)) return;
-    
-      // Update inactive timer
-      this.updateActivity();
+    this.onMessage(
+      "communicate",
+      (client, details: { card: Card; cardRank: CommunicationRank }) => {
+        const player = this.state.players.get(client.sessionId);
 
-      // Convert plain object to Card schema
-      const schemaCard = new Card();
-      schemaCard.color = details.card.color;
-      schemaCard.number = details.card.number;
-    
-      // Assign schema instance
-      player.hasCommunicated = true;
-      player.communicationCard = schemaCard;
-      player.communicationRank = details.cardRank;
-      player.intendsToCommunicate = false;
-    });
+        // Validate game stage
+        if (
+          this.state.currentGameStage !== GameStage.TrickStart &&
+          this.state.currentGameStage !== GameStage.TrickEnd
+        )
+          return;
+
+        // Check if player already communicated
+        if (player.hasCommunicated) return;
+
+        // Validate communication
+        if (!this.isValidCommunication(player, details.card, details.cardRank))
+          return;
+
+        // Update inactive timer
+        this.updateActivity();
+
+        // Convert plain object to Card schema
+        const schemaCard = new Card();
+        schemaCard.color = details.card.color;
+        schemaCard.number = details.card.number;
+
+        // Assign schema instance
+        player.hasCommunicated = true;
+        player.communicationCard = schemaCard;
+        player.communicationRank = details.cardRank;
+        player.intendsToCommunicate = false;
+      },
+    );
 
     this.onMessage("restart_game", (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.isHost) return; // Only host can restart
-    
+
       console.log(`Game is being restarted by ${player.displayName}`);
       this.resetGameState();
     });
-    
+
     this.onMessage("give_up", (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.isHost) return; // Only host can give up
@@ -426,7 +514,6 @@ export class CrewRoom extends Room<CrewGameState> {
       this.state.gameSucceeded = false;
       this.state.currentGameStage = GameStage.GameEnd;
     });
-
   }
 
   // Helper method for inactivity
@@ -435,19 +522,19 @@ export class CrewRoom extends Room<CrewGameState> {
   }
 
   onAuth(client: Client, options: any, request: any) {
-    const token = options.token;  // Get token from client
+    const token = options.token; // Get token from client
     const expectedSecret = process.env.SHARED_SECRET;
-  
+
     if (token !== expectedSecret) {
       throw new Error("Unauthorized");
     }
-  
+
     return true;
   }
 
   onJoin(client: Client, options: JoinOptions) {
     let player = this.state.players.get(client.sessionId);
-  
+
     if (player) {
       // Reconnecting player
       console.log(`Player ${player.displayName} reconnected`);
@@ -459,53 +546,62 @@ export class CrewRoom extends Room<CrewGameState> {
     // Game has started - don't let anyone join
     // TODO: Let them join as a spectator
     if (this.state.gameStarted === true) return;
-  
+
     this.updateActivity();
     player = new Player();
     player.sessionId = client.sessionId;
 
     // Get current player count for a fallback display name
     const playerCount = this.state.players.size + 1;
-    player.displayName = options.displayName || "Player " + playerCount.toString();
+    player.displayName =
+      options.displayName || "Player " + playerCount.toString();
 
-    console.log("User (", player.displayName, ") just joined room: ", this.roomId);
-  
+    console.log(
+      "User (",
+      player.displayName,
+      ") just joined room: ",
+      this.roomId,
+    );
+
     if (this.state.players.size === 0) {
       player.isHost = true;
     }
     this.state.players.set(client.sessionId, player);
     this.state.playerOrder.push(client.sessionId);
-    
   }
 
   onLeave(client: Client, consented: boolean) {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-  
+
     const wasHost = player.isHost;
     player.intendsToCommunicate = false;
-  
+
     // Mark as disconnected — notify clients via schema
     player.isConnected = false;
-  
+
     if (consented) {
       // Player left intentionally (closed tab, etc.)
       this.removePlayer(client.sessionId, wasHost);
     } else {
       // Player disconnected unexpectedly (e.g., network drop)
       const RECONNECT_TIMEOUT = 300; // seconds
-  
-      this.allowReconnection(client, RECONNECT_TIMEOUT).then(() => {
-        console.log(`Player ${player.displayName} reconnected`);
-        player.isConnected = true;
-      }).catch(() => {
-        console.log(`Player ${player.displayName} failed to reconnect in time`);
-        this.removePlayer(client.sessionId, wasHost);
-      });
+
+      this.allowReconnection(client, RECONNECT_TIMEOUT)
+        .then(() => {
+          console.log(`Player ${player.displayName} reconnected`);
+          player.isConnected = true;
+        })
+        .catch(() => {
+          console.log(
+            `Player ${player.displayName} failed to reconnect in time`,
+          );
+          this.removePlayer(client.sessionId, wasHost);
+        });
     }
   }
 
-    // Helper to remove player and reassign host if needed
+  // Helper to remove player and reassign host if needed
   private removePlayer(sessionId: string, wasHost: boolean) {
     this.state.players.delete(sessionId);
 
@@ -538,7 +634,7 @@ export class CrewRoom extends Room<CrewGameState> {
 
     // Deal cards evenly
     const playerIds = Array.from(this.state.players.keys());
-  
+
     // Randomize starting index
     const startIndex = Math.floor(Math.random() * playerIds.length);
 
@@ -554,8 +650,12 @@ export class CrewRoom extends Room<CrewGameState> {
     }
 
     // Determine who has black 4
-    const starterId = playerIds.find(id =>
-      this.state.players.get(id)!.hand.some(card => card.color === CardColor.Black && card.number === 4)
+    const starterId = playerIds.find((id) =>
+      this.state.players
+        .get(id)!
+        .hand.some(
+          (card) => card.color === CardColor.Black && card.number === 4,
+        ),
     );
 
     if (starterId) {
@@ -565,21 +665,51 @@ export class CrewRoom extends Room<CrewGameState> {
       console.log("Uh oh, can't find the Black 4 in anyone's hand??!");
     }
 
-    if (gameSetupInstructions.useExpansion && gameSetupInstructions.difficultyScore !== undefined) {
+    if (
+      gameSetupInstructions.useExpansion &&
+      gameSetupInstructions.difficultyScore !== undefined
+    ) {
       const numPlayers = this.state.playerOrder.length;
-      this.expansionTasks = selectExpansionTasks(gameSetupInstructions.difficultyScore, numPlayers);
+      this.expansionTasks = selectExpansionTasks(
+        gameSetupInstructions.difficultyScore,
+        numPlayers,
+      );
+      this.state.isExpansionGame = true;
+      this.state.expansionDifficulty = gameSetupInstructions.difficultyScore;
+      this.state.expansionTasks = new ArraySchema<ExpansionTaskState>();
+      for (const t of this.expansionTasks) {
+        const st = new ExpansionTaskState();
+        st.id = t.id;
+        st.displayName = t.displayName;
+        st.description = t.description;
+        st.difficultyFor3 = t.difficultyFor3;
+        st.difficultyFor4 = t.difficultyFor4;
+        st.difficultyFor5 = t.difficultyFor5;
+        st.canEvaluateMidGame = t.canEvaluateMidGame;
+        st.evaluationDescription = t.evaluationDescription;
+        st.taskState = TaskState.IN_PROGRESS;
+        st.player = "";
+        this.state.expansionTasks.push(st);
+      }
     } else if (gameSetupInstructions.includeTasks) {
-      const generatedTasks = this.generateTasks(gameSetupInstructions.taskInstructions);
+      const generatedTasks = this.generateTasks(
+        gameSetupInstructions.taskInstructions,
+      );
       this.state.allTasks.push(...generatedTasks);
     }
-    
+
     // this.state.currentGameStage = GameStage.TrickStart;
   }
 
   generateDeck(includeBlackCards: boolean = true): Card[] {
-    const colors = [CardColor.Yellow, CardColor.Green, CardColor.Pink, CardColor.Blue];
+    const colors = [
+      CardColor.Yellow,
+      CardColor.Green,
+      CardColor.Pink,
+      CardColor.Blue,
+    ];
     const deck: Card[] = [];
-  
+
     for (const color of colors) {
       for (let num = 1; num <= 9; num++) {
         const card = new Card();
@@ -588,7 +718,7 @@ export class CrewRoom extends Room<CrewGameState> {
         deck.push(card);
       }
     }
-  
+
     if (includeBlackCards) {
       for (let num = 1; num <= 4; num++) {
         const card = new Card();
@@ -597,33 +727,42 @@ export class CrewRoom extends Room<CrewGameState> {
         deck.push(card);
       }
     }
-  
+
     return deck;
   }
 
   getExpectedTrickCount(): number {
     // Total players = total tricks usually (or your custom logic)
-    
+
     // Determine how many tricks are expected based on number of players
     const numPlayers = this.state.playerOrder.length;
     let totalTricksExpected = 0;
 
     switch (numPlayers) {
-      case 5: totalTricksExpected = 8; break;
-      case 4: totalTricksExpected = 10; break;
-      case 3: totalTricksExpected = 13; break;
-      default: return; // Invalid player count
+      case 5:
+        totalTricksExpected = 8;
+        break;
+      case 4:
+        totalTricksExpected = 10;
+        break;
+      case 3:
+        totalTricksExpected = 13;
+        break;
+      default:
+        return; // Invalid player count
     }
     return totalTricksExpected;
   }
-  
-  generateTasks(instructions: GameSetupInstructions["taskInstructions"]): SimpleTask[] {
+
+  generateTasks(
+    instructions: GameSetupInstructions["taskInstructions"],
+  ): SimpleTask[] {
     const cardPool = this.generateDeck(false); // No black cards
     this.shuffle(cardPool);
     const taskList: SimpleTask[] = [];
-  
+
     const drawCard = (): Card | null => cardPool.pop() ?? null;
-  
+
     // === Plain Tasks ===
     for (let i = 0; i < instructions.plainTasks; i++) {
       const card = drawCard();
@@ -635,7 +774,7 @@ export class CrewRoom extends Room<CrewGameState> {
       task.sequenceIndex = 0;
       taskList.push(task);
     }
-  
+
     // === Ordered Tasks ===
     for (let i = 1; i <= instructions.orderedTasks; i++) {
       const card = drawCard();
@@ -647,7 +786,7 @@ export class CrewRoom extends Room<CrewGameState> {
       task.sequenceIndex = i; // Starts at 1
       taskList.push(task);
     }
-  
+
     // === Sequenced Tasks ===
     for (let i = 1; i <= instructions.sequencedTasks; i++) {
       const card = drawCard();
@@ -659,7 +798,7 @@ export class CrewRoom extends Room<CrewGameState> {
       task.sequenceIndex = i; // Starts at 1
       taskList.push(task);
     }
-  
+
     // === Must Be Last Task ===
     if (instructions.lastTask) {
       const card = drawCard();
@@ -672,10 +811,9 @@ export class CrewRoom extends Room<CrewGameState> {
         taskList.push(task);
       }
     }
-  
+
     return taskList;
   }
-  
 
   isSameTask(a: SimpleTask, b: SimpleTask): boolean {
     return (
@@ -685,8 +823,7 @@ export class CrewRoom extends Room<CrewGameState> {
       a.sequenceIndex === b.sequenceIndex
     );
   }
-  
-  
+
   shuffle(array: Card[]) {
     for (let i = array.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -703,13 +840,13 @@ export class CrewRoom extends Room<CrewGameState> {
   determineTrickWinner(trick: Trick) {
     const playedCards = trick.playedCards;
     const playerOrder = trick.playerOrder;
-  
+
     let winningIndex = 0;
     let highestValue = -1;
-  
+
     // First, check for any black cards
     let blackCardPlayed = false;
-  
+
     playedCards.forEach((card, idx) => {
       if (card.color === CardColor.Black) {
         blackCardPlayed = true;
@@ -719,12 +856,12 @@ export class CrewRoom extends Room<CrewGameState> {
         }
       }
     });
-  
+
     if (!blackCardPlayed) {
       // No black cards, determine winner by lead suit
       const leadColor = playedCards[0].color;
       highestValue = -1;
-  
+
       playedCards.forEach((card, idx) => {
         if (card.color === leadColor && card.number > highestValue) {
           highestValue = card.number;
@@ -732,7 +869,7 @@ export class CrewRoom extends Room<CrewGameState> {
         }
       });
     }
-  
+
     return playerOrder[winningIndex]; // Return the sessionId of the winning player
   }
 
@@ -744,42 +881,41 @@ export class CrewRoom extends Room<CrewGameState> {
   isValidCommunication(
     player: Player,
     card: Card,
-    rank: CommunicationRank
+    rank: CommunicationRank,
   ): boolean {
     // Check card isn't black
     if (card.color === "black") return false;
 
     // Find all cards in player's hand of the same color
     const sameColorCards = player.hand.filter((c) => c.color === card.color);
-  
+
     if (sameColorCards.length === 0) return false; // Player doesn't have any card of that color
     const numbers = sameColorCards.map((c) => c.number);
     const maxNumber = Math.max(...numbers);
     const minNumber = Math.min(...numbers);
-  
+
     // Confirm player actually has the communicated card
-    const hasCard = sameColorCards.some(
-      (c) => c.number === card.number
-    );
+    const hasCard = sameColorCards.some((c) => c.number === card.number);
     if (!hasCard) return false;
-  
+
     switch (rank) {
       case CommunicationRank.Only:
         return sameColorCards.length === 1;
-  
+
       case CommunicationRank.Highest:
         return sameColorCards.length > 1 && card.number === maxNumber;
-  
+
       case CommunicationRank.Lowest:
         return sameColorCards.length > 1 && card.number === minNumber;
-  
+
       case CommunicationRank.Unknown:
-        const isHighest = card.number === maxNumber && sameColorCards.length > 1;
+        const isHighest =
+          card.number === maxNumber && sameColorCards.length > 1;
         const isLowest = card.number === minNumber && sameColorCards.length > 1;
         const isOnly = sameColorCards.length === 1;
         const validRanks = [isHighest, isLowest, isOnly].filter((v) => v);
         return validRanks.length === 1; // Exactly one condition is true
-  
+
       default:
         return false;
     }
@@ -787,24 +923,28 @@ export class CrewRoom extends Room<CrewGameState> {
 
   evaluateTrickForTasks(trick: Trick) {
     const trickIndex = this.state.completedTricks.length - 1;
-  
+
     // === Ordered Tasks Evaluation ===
     const orderedTasks = this.state.allTasks
-      .filter(task => !task.completed && !task.failed && task.taskCategory === "ordered")
+      .filter(
+        (task) =>
+          !task.completed && !task.failed && task.taskCategory === "ordered",
+      )
       .sort((a, b) => a.sequenceIndex - b.sequenceIndex);
-  
+
     for (const task of orderedTasks) {
-      const cardInTrick = trick.playedCards.some(card =>
-        card.color === task.card.color && card.number === task.card.number
+      const cardInTrick = trick.playedCards.some(
+        (card) =>
+          card.color === task.card.color && card.number === task.card.number,
       );
-  
+
       if (!cardInTrick) continue; // Not in this trick, skip evaluation
-  
+
       if (trick.trickWinner !== task.player) {
         task.failed = true; // Card played, but wrong player won
         continue;
       }
-  
+
       // Check if task is completed in correct order
       if (task.sequenceIndex - 1 === this.state.completedTaskCount) {
         task.completed = true;
@@ -814,24 +954,28 @@ export class CrewRoom extends Room<CrewGameState> {
         task.failed = true; // Completed out of order
       }
     }
-  
+
     // === Sequence Tasks Evaluation ===
     const sequenceTasks = this.state.allTasks
-      .filter(task => !task.completed && !task.failed && task.taskCategory === "sequence")
+      .filter(
+        (task) =>
+          !task.completed && !task.failed && task.taskCategory === "sequence",
+      )
       .sort((a, b) => a.sequenceIndex - b.sequenceIndex);
-  
+
     for (const task of sequenceTasks) {
-      const cardInTrick = trick.playedCards.some(card =>
-        card.color === task.card.color && card.number === task.card.number
+      const cardInTrick = trick.playedCards.some(
+        (card) =>
+          card.color === task.card.color && card.number === task.card.number,
       );
-  
+
       if (!cardInTrick) continue;
-  
+
       if (trick.trickWinner !== task.player) {
         task.failed = true;
         continue;
       }
-  
+
       if (task.sequenceIndex - 1 === this.state.completedSequenceTaskCount) {
         task.completed = true;
         task.completedAtTrickIndex = trickIndex;
@@ -841,18 +985,21 @@ export class CrewRoom extends Room<CrewGameState> {
         task.failed = true;
       }
     }
-  
+
     // === Plain Tasks Evaluation ===
-    const plainTasks = this.state.allTasks
-      .filter(task => !task.completed && !task.failed && task.taskCategory === "plain");
-  
+    const plainTasks = this.state.allTasks.filter(
+      (task) =>
+        !task.completed && !task.failed && task.taskCategory === "plain",
+    );
+
     for (const task of plainTasks) {
-      const cardInTrick = trick.playedCards.some(card =>
-        card.color === task.card.color && card.number === task.card.number
+      const cardInTrick = trick.playedCards.some(
+        (card) =>
+          card.color === task.card.color && card.number === task.card.number,
       );
-  
+
       if (!cardInTrick) continue;
-  
+
       if (trick.trickWinner === task.player) {
         task.completed = true;
         task.completedAtTrickIndex = trickIndex;
@@ -861,26 +1008,30 @@ export class CrewRoom extends Room<CrewGameState> {
         task.failed = true;
       }
     }
-  
+
     // === Must Be Last Task Evaluation ===
     const lastTrickIndex = this.state.completedTricks.length - 1;
-    const isLastTrick = this.state.completedTricks.length === this.state.expectedTrickCount;
-  
-    const lastTasks = this.state.allTasks
-      .filter(task => !task.completed && !task.failed && task.taskCategory === "must_be_last");
-  
+    const isLastTrick =
+      this.state.completedTricks.length === this.state.expectedTrickCount;
+
+    const lastTasks = this.state.allTasks.filter(
+      (task) =>
+        !task.completed && !task.failed && task.taskCategory === "must_be_last",
+    );
+
     for (const task of lastTasks) {
-      const cardInTrick = trick.playedCards.some(card =>
-        card.color === task.card.color && card.number === task.card.number
+      const cardInTrick = trick.playedCards.some(
+        (card) =>
+          card.color === task.card.color && card.number === task.card.number,
       );
-  
+
       if (!cardInTrick) continue;
-  
+
       if (trick.trickWinner !== task.player) {
         task.failed = true;
         continue;
       }
-  
+
       if (isLastTrick) {
         task.completed = true;
         task.completedAtTrickIndex = trickIndex;
@@ -889,18 +1040,37 @@ export class CrewRoom extends Room<CrewGameState> {
         task.failed = true;
       }
     }
-  
+
     // === Final Check for Remaining Ordered Tasks ===
     for (const task of orderedTasks) {
-      if (!task.completed && !task.failed && task.sequenceIndex <= this.state.completedTaskCount) {
+      if (
+        !task.completed &&
+        !task.failed &&
+        task.sequenceIndex <= this.state.completedTaskCount
+      ) {
         task.failed = true; // Missed its proper order slot
       }
     }
   }
 
+  evaluateTricksForExpansionTasks() {
+    const tricks = Array.from(this.state.completedTricks);
+    for (const task of this.state.expansionTasks) {
+      if (
+        task.taskState === TaskState.COMPLETED ||
+        task.taskState === TaskState.FAILED
+      )
+        continue;
+      const def = this.expansionTasks.find((t) => t.id === task.id);
+      if (!def) continue;
+      const result = def.evaluate(tricks);
+      task.taskState = result;
+    }
+  }
+
   resetGameState() {
     this.state.gameStarted = false;
-  
+
     // Reset player state but keep displayName, sessionId, isHost
     this.state.players.forEach((player) => {
       player.hand = new ArraySchema<Card>();
@@ -909,18 +1079,20 @@ export class CrewRoom extends Room<CrewGameState> {
       player.communicationRank = CommunicationRank.Unknown;
       player.intendsToCommunicate = false;
     });
-  
+
     this.state.currentPlayer = "";
     this.state.commanderPlayer = "";
     this.state.currentTrick = new Trick();
     this.state.completedTricks = new ArraySchema<Trick>();
     this.state.allTasks = new ArraySchema<SimpleTask>();
+    this.state.expansionTasks = new ArraySchema<ExpansionTaskState>();
     this.state.completedTaskCount = 0;
     this.state.completedSequenceTaskCount = 0;
+    this.state.isExpansionGame = false;
+    this.state.expansionDifficulty = 0;
+    this.expansionTasks = [];
     this.state.gameFinished = false;
     this.state.gameSucceeded = false;
     this.state.currentGameStage = GameStage.NotStarted;
   }
-  
-  
 }
