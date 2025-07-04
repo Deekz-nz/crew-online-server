@@ -33,16 +33,9 @@ export class Card extends Schema {
   @type("number") number!: number; // 1 - 9
 }
 
-export class SimpleTask extends Schema {
-  @type(Card) card: Card;
+export class BaseTask extends Schema {
+  @type("string") taskId: string;
   @type("string") player: string;
-  @type("number") taskNumber: number;
-
-  @type("string") taskCategory: TaskCategory;
-
-  // Only used for ordered/sequence tasks
-  @type("number") sequenceIndex: number; // 0-based index in order
-
   @type("boolean") failed: boolean = false;
   @type("boolean") completed: boolean = false;
 
@@ -50,6 +43,22 @@ export class SimpleTask extends Schema {
   @type("number") completedAtTrickIndex?: number;
 }
 
+export class SimpleTask extends BaseTask {
+  @type(Card) card: Card;
+  @type("number") taskNumber: number;
+
+  @type("string") taskCategory: TaskCategory;
+
+  // Only used for ordered/sequence tasks
+  @type("number") sequenceIndex: number; // 0-based index in order
+}
+
+
+export class ExpansionTask extends BaseTask {
+  @type("string") displayName: string;
+  @type("string") description: string;
+  @type("string") evaluationDescription: string;
+}
 
 // === Define Player ===
 export class Player extends Schema {
@@ -79,5 +88,5 @@ export class Trick extends Schema {
 // === Define PostGameStats ===
 export class PlayerHistory extends Schema {
   @type([Card]) cards = new ArraySchema<Card>();
-  @type([SimpleTask]) tasks = new ArraySchema<SimpleTask>();
+  @type([BaseTask]) tasks = new ArraySchema<BaseTask>();
 }

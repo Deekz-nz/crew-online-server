@@ -1,10 +1,23 @@
-import { ExpansionTask } from "./types";
-export { ExpansionTask, TaskState } from "./types";
-import { basicTasks } from "./taskSetBasic";
-import { extraTasks } from "./taskSetExtra";
+import { ExpansionTaskDefinition } from "./types";
+export { ExpansionTaskDefinition, TaskState } from "./types";
+import { simpleTasks } from "./taskSetSimple";
+import { winCountTasks } from "./taskSetWinCount";
+import { specificWinTasks } from "./taskSetSpecificWins";
+import { relativeWinTasks } from "./taskSetRelativeWins";
+import { dontWinTasks } from "./taskSetDontWin";
+import { exactCountTasks } from "./taskSetExactCounts";
+import { miscTasks } from "./taskSetMisc";
 
-export function getAllExpansionTasks(): ExpansionTask[] {
-  return [...basicTasks, ...extraTasks];
+export function getAllExpansionTasks(): ExpansionTaskDefinition[] {
+  return [
+    ...simpleTasks,
+    ...winCountTasks,
+    ...specificWinTasks,
+    ...relativeWinTasks,
+    ...dontWinTasks,
+    ...exactCountTasks,
+    ...miscTasks,
+  ];
 }
 
 export function shuffle<T>(arr: T[]): void {
@@ -14,15 +27,19 @@ export function shuffle<T>(arr: T[]): void {
   }
 }
 
+export function getExpansionTaskDefinitionById(taskId: string) {
+  const tasks = getAllExpansionTasks();
+  return tasks.find(task => task.id === taskId);
+}
 export function selectExpansionTasks(
   desiredDifficulty: number,
   numPlayers: number
-): ExpansionTask[] {
+): ExpansionTaskDefinition[] {
   const tasks = getAllExpansionTasks().slice();
   shuffle(tasks);
-  const selected: ExpansionTask[] = [];
+  const selected: ExpansionTaskDefinition[] = [];
 
-  const difficultyFor = (task: ExpansionTask) => {
+  const difficultyFor = (task: ExpansionTaskDefinition) => {
     switch (numPlayers) {
       case 3:
         return task.difficultyFor3;

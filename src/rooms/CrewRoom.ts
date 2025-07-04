@@ -5,8 +5,8 @@
 import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 import { CrewGameState } from "./schema/CrewRoomState";
-import { Card, CardColor, CommunicationRank, GameStage, Player, PlayerHistory, SimpleTask, Trick } from "./schema/CrewTypes";
-import { ExpansionTask, selectExpansionTasks } from "../expansionTasks";
+import { BaseTask, Card, CardColor, CommunicationRank, ExpansionTask, GameStage, Player, PlayerHistory, SimpleTask, Trick,  } from "./schema/CrewTypes";
+import { getExpansionTaskDefinitionById, selectExpansionTasks, TaskState } from "../expansionTasks";
 
 
 interface JoinOptions {
@@ -21,13 +21,12 @@ interface GameSetupInstructions {
     sequencedTasks: number;
     lastTask: boolean;
   }
-  useExpansion?: boolean;
-  difficultyScore?: number;
+  useExpansion: boolean;
+  difficultyScore: number;
 }
 export class CrewRoom extends Room<CrewGameState> {
   private lastActivityTimestamp: number;
   private inactivityInterval: NodeJS.Timeout;
-  private expansionTasks: ExpansionTask[] = [];
   maxClients = 5;
 
   onCreate(options: any) {
@@ -80,7 +79,7 @@ export class CrewRoom extends Room<CrewGameState> {
     })
 
     // GameStage = GameSetup
-    this.onMessage("take_task", (client, taskData: SimpleTask) => {
+    this.onMessage("take_task", (client, taskData: BaseTask) => {
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
     
       const task = this.state.allTasks.find(t => this.isSameTask(t, taskData)); // find matching task
@@ -98,7 +97,7 @@ export class CrewRoom extends Room<CrewGameState> {
     
 
     // GameStage = GameSetup
-    this.onMessage("return_task", (client, taskData: SimpleTask) => {
+    this.onMessage("return_task", (client, taskData: BaseTask) => {
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
     
       const task = this.state.allTasks.find(t => this.isSameTask(t, taskData)); // find matching task
@@ -141,21 +140,42 @@ export class CrewRoom extends Room<CrewGameState> {
         const playerTasks = this.state.allTasks.filter(task => task.player === playerId);
         // Store copies of tasks (and their cards) to avoid shared references
         playerTasks.forEach(task => {
-          const cardCopy = new Card();
-          cardCopy.color = task.card.color;
-          cardCopy.number = task.card.number;
+          if (this.state.playExpansion) {
+            // Deep copy expansion tasks and put in to history
+            const expansionTask = task as ExpansionTask;
 
-          const taskCopy = new SimpleTask();
-          taskCopy.card = cardCopy;
-          taskCopy.player = task.player;
-          taskCopy.taskNumber = task.taskNumber;
-          taskCopy.taskCategory = task.taskCategory;
-          taskCopy.sequenceIndex = task.sequenceIndex;
-          taskCopy.failed = task.failed;
-          taskCopy.completed = task.completed;
-          taskCopy.completedAtTrickIndex = task.completedAtTrickIndex;
+            const taskCopy = new ExpansionTask();
+            taskCopy.taskId = expansionTask.taskId;
+            taskCopy.player = expansionTask.player;
+            taskCopy.failed = expansionTask.failed;
+            taskCopy.completed = expansionTask.completed;
+            taskCopy.completedAtTrickIndex = expansionTask.completedAtTrickIndex;
+            taskCopy.evaluationDescription = expansionTask.evaluationDescription;
+            taskCopy.description = expansionTask.description;
+            taskCopy.displayName = expansionTask.displayName
 
-          history.tasks.push(taskCopy);
+            history.tasks.push(taskCopy);
+
+          } else {
+            const simpleTask = task as SimpleTask;
+            const cardCopy = new Card();
+            cardCopy.color = simpleTask.card.color;
+            cardCopy.number = simpleTask.card.number;
+
+            const taskCopy = new SimpleTask();
+            taskCopy.taskId = simpleTask.taskId;
+            taskCopy.card = cardCopy;
+            taskCopy.player = simpleTask.player;
+            taskCopy.taskNumber = simpleTask.taskNumber;
+            taskCopy.taskCategory = simpleTask.taskCategory;
+            taskCopy.sequenceIndex = simpleTask.sequenceIndex;
+            taskCopy.failed = simpleTask.failed;
+            taskCopy.completed = simpleTask.completed;
+            taskCopy.completedAtTrickIndex = simpleTask.completedAtTrickIndex;
+
+            history.tasks.push(taskCopy);
+          }
+          
         });
 
         this.state.historyPlayerStats.set(playerId, history);
@@ -273,7 +293,11 @@ export class CrewRoom extends Room<CrewGameState> {
           this.state.completedTricks.push(trickCopy);
 
           // Evaluate this trick for tasks
-          this.evaluateTrickForTasks(trick);
+          if (this.state.playExpansion) {
+            this.evaluateTricksForExpansionTasks();
+          } else {
+            this.evaluateTrickForSimpleTasks(trick);
+          }
         } else {
           // Trick still going - move to next player
           this.state.currentPlayer = this.getNextPlayer(client.sessionId);
@@ -532,6 +556,7 @@ export class CrewRoom extends Room<CrewGameState> {
     this.state.currentGameStage = GameStage.GameSetup;
     this.state.gameStarted = true;
 
+    this.state.playExpansion = gameSetupInstructions.useExpansion;
     // Create and shuffle the deck
     const deck = this.generateDeck();
     this.shuffle(deck);
@@ -565,11 +590,13 @@ export class CrewRoom extends Room<CrewGameState> {
       console.log("Uh oh, can't find the Black 4 in anyone's hand??!");
     }
 
-    if (gameSetupInstructions.useExpansion && gameSetupInstructions.difficultyScore !== undefined) {
-      const numPlayers = this.state.playerOrder.length;
-      this.expansionTasks = selectExpansionTasks(gameSetupInstructions.difficultyScore, numPlayers);
+    if (this.state.playExpansion && gameSetupInstructions.difficultyScore !== undefined) {
+      // Create expansion tasks from the definitions
+      const generatedExpansionTasks = this.generateExpansionTasks(gameSetupInstructions);
+      this.state.allTasks.push(...generatedExpansionTasks); 
     } else if (gameSetupInstructions.includeTasks) {
-      const generatedTasks = this.generateTasks(gameSetupInstructions.taskInstructions);
+      // Create simple tasks
+      const generatedTasks = this.generateSimplesTasks(gameSetupInstructions.taskInstructions);
       this.state.allTasks.push(...generatedTasks);
     }
     
@@ -617,7 +644,7 @@ export class CrewRoom extends Room<CrewGameState> {
     return totalTricksExpected;
   }
   
-  generateTasks(instructions: GameSetupInstructions["taskInstructions"]): SimpleTask[] {
+  generateSimplesTasks(instructions: GameSetupInstructions["taskInstructions"]): SimpleTask[] {
     const cardPool = this.generateDeck(false); // No black cards
     this.shuffle(cardPool);
     const taskList: SimpleTask[] = [];
@@ -629,6 +656,7 @@ export class CrewRoom extends Room<CrewGameState> {
       const card = drawCard();
       if (!card) break;
       const task = new SimpleTask();
+      task.taskId = "plain"+i;
       task.card = card;
       task.player = "";
       task.taskCategory = "plain";
@@ -641,6 +669,7 @@ export class CrewRoom extends Room<CrewGameState> {
       const card = drawCard();
       if (!card) break;
       const task = new SimpleTask();
+      task.taskId = "ordered"+i;
       task.card = card;
       task.player = "";
       task.taskCategory = "ordered";
@@ -653,6 +682,7 @@ export class CrewRoom extends Room<CrewGameState> {
       const card = drawCard();
       if (!card) break;
       const task = new SimpleTask();
+      task.taskId = "sequenced"+i;
       task.card = card;
       task.player = "";
       task.taskCategory = "sequence";
@@ -665,6 +695,7 @@ export class CrewRoom extends Room<CrewGameState> {
       const card = drawCard();
       if (card) {
         const task = new SimpleTask();
+        task.taskId = "last";
         task.card = card;
         task.player = "";
         task.taskCategory = "must_be_last";
@@ -676,13 +707,25 @@ export class CrewRoom extends Room<CrewGameState> {
     return taskList;
   }
   
+  generateExpansionTasks(instructions: GameSetupInstructions): ExpansionTask[] {
+    const numPlayers = this.state.playerOrder.length;
+    const generatedTaskDefinitions = selectExpansionTasks(instructions.difficultyScore, numPlayers);
+    const generatedTasks = generatedTaskDefinitions.map(taskDef => {
+      const newTask = new ExpansionTask()
+      newTask.taskId = taskDef.id;
+      newTask.player = "";
+      newTask.displayName = taskDef.displayName;
+      newTask.description = taskDef.description;
+      newTask.evaluationDescription = taskDef.evaluationDescription;
+      return newTask;
+    })
 
-  isSameTask(a: SimpleTask, b: SimpleTask): boolean {
+    return generatedTasks
+  }
+
+  isSameTask(a: BaseTask, b: BaseTask): boolean {
     return (
-      a.card.color === b.card.color &&
-      a.card.number === b.card.number &&
-      a.taskCategory === b.taskCategory &&
-      a.sequenceIndex === b.sequenceIndex
+      a.taskId === b.taskId
     );
   }
   
@@ -785,11 +828,12 @@ export class CrewRoom extends Room<CrewGameState> {
     }
   }
 
-  evaluateTrickForTasks(trick: Trick) {
+  evaluateTrickForSimpleTasks(trick: Trick) {
     const trickIndex = this.state.completedTricks.length - 1;
   
     // === Ordered Tasks Evaluation ===
     const orderedTasks = this.state.allTasks
+      .map(task => task as SimpleTask)
       .filter(task => !task.completed && !task.failed && task.taskCategory === "ordered")
       .sort((a, b) => a.sequenceIndex - b.sequenceIndex);
   
@@ -817,6 +861,7 @@ export class CrewRoom extends Room<CrewGameState> {
   
     // === Sequence Tasks Evaluation ===
     const sequenceTasks = this.state.allTasks
+      .map(task => task as SimpleTask)
       .filter(task => !task.completed && !task.failed && task.taskCategory === "sequence")
       .sort((a, b) => a.sequenceIndex - b.sequenceIndex);
   
@@ -844,6 +889,7 @@ export class CrewRoom extends Room<CrewGameState> {
   
     // === Plain Tasks Evaluation ===
     const plainTasks = this.state.allTasks
+      .map(task => task as SimpleTask)
       .filter(task => !task.completed && !task.failed && task.taskCategory === "plain");
   
     for (const task of plainTasks) {
@@ -867,6 +913,7 @@ export class CrewRoom extends Room<CrewGameState> {
     const isLastTrick = this.state.completedTricks.length === this.state.expectedTrickCount;
   
     const lastTasks = this.state.allTasks
+      .map(task => task as SimpleTask)
       .filter(task => !task.completed && !task.failed && task.taskCategory === "must_be_last");
   
     for (const task of lastTasks) {
@@ -896,6 +943,23 @@ export class CrewRoom extends Room<CrewGameState> {
         task.failed = true; // Missed its proper order slot
       }
     }
+  }
+
+  evaluateTricksForExpansionTasks() {
+    const tricks = this.state.completedTricks;
+    const expansionTasks = this.state.allTasks.map(task => task as ExpansionTask);
+
+    expansionTasks.forEach(task => {
+      if (!task.completed && !task.failed) {
+        // Find the task definition for this task
+        const taskDef = getExpansionTaskDefinitionById(task.taskId);
+        if (!taskDef) return;
+
+        const result = taskDef.evaluate(tricks.toArray(), task.player);
+        if (result === TaskState.COMPLETED) task.completed = true;
+        if (result === TaskState.FAILED) task.failed = true;
+      }
+    })
   }
 
   resetGameState() {
