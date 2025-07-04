@@ -54,6 +54,12 @@ export class SimpleTask extends BaseTask {
 }
 
 
+export class ExpansionTask extends BaseTask {
+  @type("string") displayName: string;
+  @type("string") description: string;
+  @type("string") evaluationDescription: string;
+}
+
 // === Define Player ===
 export class Player extends Schema {
   @type("string") sessionId!: string;
@@ -82,5 +88,5 @@ export class Trick extends Schema {
 // === Define PostGameStats ===
 export class PlayerHistory extends Schema {
   @type([Card]) cards = new ArraySchema<Card>();
-  @type([SimpleTask]) tasks = new ArraySchema<SimpleTask>();
+  @type([BaseTask]) tasks = new ArraySchema<BaseTask>();
 }

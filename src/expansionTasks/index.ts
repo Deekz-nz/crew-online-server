@@ -1,9 +1,9 @@
-import { ExpansionTask } from "./types";
-export { ExpansionTask, TaskState } from "./types";
+import { ExpansionTaskDefinition } from "./types";
+export { ExpansionTaskDefinition, TaskState } from "./types";
 import { basicTasks } from "./taskSetBasic";
 import { extraTasks } from "./taskSetExtra";
 
-export function getAllExpansionTasks(): ExpansionTask[] {
+export function getAllExpansionTasks(): ExpansionTaskDefinition[] {
   return [...basicTasks, ...extraTasks];
 }
 
@@ -14,15 +14,19 @@ export function shuffle<T>(arr: T[]): void {
   }
 }
 
+export function getExpansionTaskDefinitionById(taskId: string) {
+  const tasks = getAllExpansionTasks();
+  return tasks.find(task => task.id === taskId);
+}
 export function selectExpansionTasks(
   desiredDifficulty: number,
   numPlayers: number
-): ExpansionTask[] {
+): ExpansionTaskDefinition[] {
   const tasks = getAllExpansionTasks().slice();
   shuffle(tasks);
-  const selected: ExpansionTask[] = [];
+  const selected: ExpansionTaskDefinition[] = [];
 
-  const difficultyFor = (task: ExpansionTask) => {
+  const difficultyFor = (task: ExpansionTaskDefinition) => {
     switch (numPlayers) {
       case 3:
         return task.difficultyFor3;

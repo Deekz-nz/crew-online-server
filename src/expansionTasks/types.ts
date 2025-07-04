@@ -6,7 +6,7 @@ export enum TaskState {
 
 import { Trick } from "../rooms/schema/CrewTypes";
 
-export interface ExpansionTask {
+export interface ExpansionTaskDefinition {
   id: string;
   displayName: string;
   description: string;
@@ -15,5 +15,5 @@ export interface ExpansionTask {
   difficultyFor5: number;
   canEvaluateMidGame: boolean;
   evaluationDescription: string;
-  evaluate: (tricks: Trick[]) => TaskState;
+  evaluate: (tricks: Trick[], playerId: string) => TaskState;
 }

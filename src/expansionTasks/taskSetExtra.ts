@@ -1,6 +1,6 @@
-import { ExpansionTask, TaskState } from "./types";
+import { ExpansionTaskDefinition, TaskState } from "./types";
 
-export const extraTasks: ExpansionTask[] = [
+export const extraTasks: ExpansionTaskDefinition[] = [
   {
     id: "extra_placeholder_1",
     displayName: "Extra Placeholder 1",
