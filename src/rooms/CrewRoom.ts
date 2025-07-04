@@ -164,17 +164,53 @@ export class CrewRoom extends Room<CrewGameState> {
       // Save player hands & tasks
       for (const [playerId, player] of this.state.players.entries()) {
         const history = new PlayerHistory();
-        history.cards.push(...player.hand);
 
-        const playerTasks = this.state.allTasks.filter(
-          (task) => task.player === playerId,
-        );
-        history.tasks.push(...playerTasks);
+        // Store copies of cards so history owns its own instances
+        player.hand.forEach(card => {
+          const cardCopy = new Card();
+          cardCopy.color = card.color;
+          cardCopy.number = card.number;
+          history.cards.push(cardCopy);
+        });
+
+        const playerTasks = this.state.allTasks.filter(task => task.player === playerId);
+        // Store copies of tasks (and their cards) to avoid shared references
+        playerTasks.forEach(task => {
+          const cardCopy = new Card();
+          cardCopy.color = task.card.color;
+          cardCopy.number = task.card.number;
+
+          const taskCopy = new SimpleTask();
+          taskCopy.card = cardCopy;
+          taskCopy.player = task.player;
+          taskCopy.taskNumber = task.taskNumber;
+          taskCopy.taskCategory = task.taskCategory;
+          taskCopy.sequenceIndex = task.sequenceIndex;
+          taskCopy.failed = task.failed;
+          taskCopy.completed = task.completed;
+          taskCopy.completedAtTrickIndex = task.completedAtTrickIndex;
+
+          history.tasks.push(taskCopy);
+        });
 
         if (this.state.isExpansionGame) {
-          history.expansionTasks.push(...this.state.expansionTasks);
-        }
+          const expansionPlayerTasks = this.state.expansionTasks.filter(task => task.player === playerId);
+          expansionPlayerTasks.forEach(task => {
+            const taskCopy = new ExpansionTaskState();
+            taskCopy.id = task.id;
+            taskCopy.displayName = task.displayName;
+            taskCopy.description = task.description;
+            taskCopy.difficultyFor3 = task.difficultyFor3;
+            taskCopy.difficultyFor4 = task.difficultyFor4;
+            taskCopy.difficultyFor5 = task.difficultyFor5;
+            taskCopy.canEvaluateMidGame = task.canEvaluateMidGame;
+            taskCopy.evaluationDescription = task.evaluationDescription;
+            taskCopy.taskState = task.taskState;
+            taskCopy.player = task.player;
 
+            history.expansionTasks.push(taskCopy);
+          })
+        }
         this.state.historyPlayerStats.set(playerId, history);
       }
 
@@ -285,7 +321,20 @@ export class CrewRoom extends Room<CrewGameState> {
             trick.trickCompleted = true;
             this.state.currentPlayer = winnerId;
             this.state.currentGameStage = GameStage.TrickEnd;
-            this.state.completedTricks.push(trick);
+
+            // Push a copy of the trick so cards aren't shared across schemas
+            const trickCopy = new Trick();
+            trick.playedCards.forEach(card => {
+              const cardCopy = new Card();
+              cardCopy.color = card.color;
+              cardCopy.number = card.number;
+              trickCopy.playedCards.push(cardCopy);
+            });
+            trick.playerOrder.forEach(p => trickCopy.playerOrder.push(p));
+            trick.communicationFlags.forEach(f => trickCopy.communicationFlags.push(f));
+            trickCopy.trickWinner = trick.trickWinner;
+            trickCopy.trickCompleted = trick.trickCompleted;
+            this.state.completedTricks.push(trickCopy);
             // Evaluate tasks based on game type
             if (this.state.isExpansionGame) {
               this.evaluateTricksForExpansionTasks();
