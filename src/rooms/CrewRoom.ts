@@ -23,6 +23,7 @@ interface GameSetupInstructions {
   }
   useExpansion: boolean;
   difficultyScore: number;
+  startingTasks?: string[];
 }
 export class CrewRoom extends Room<CrewGameState> {
   private lastActivityTimestamp: number;
@@ -709,7 +710,15 @@ export class CrewRoom extends Room<CrewGameState> {
   
   generateExpansionTasks(instructions: GameSetupInstructions): ExpansionTask[] {
     const numPlayers = this.state.playerOrder.length;
-    const generatedTaskDefinitions = selectExpansionTasks(instructions.difficultyScore, numPlayers);
+    
+    // If startingTasks was passed in, then just get those tasks from their IDs
+    // Otherwise generate new ones based on the difficulty
+
+    const generatedTaskDefinitions = 
+      (instructions.startingTasks && instructions.startingTasks.length > 0) 
+      ? instructions.startingTasks.map(taskId => {return getExpansionTaskDefinitionById(taskId)}) 
+      : selectExpansionTasks(instructions.difficultyScore, numPlayers);
+    
     const generatedTasks = generatedTaskDefinitions.map(taskDef => {
       const newTask = new ExpansionTask()
       newTask.taskId = taskDef.id;
