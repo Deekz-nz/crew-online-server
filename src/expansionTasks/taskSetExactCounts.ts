@@ -1,6 +1,6 @@
 import { CardColor } from "../rooms/schema/CrewTypes";
 import { ExpansionTaskDefinition, TaskState } from "./types";
-import { evaluateExactColorCount, evaluateExactNumberCount } from "./helpers";
+import { evaluateExactColorCount, evaluateExactNumberCount } from "./taskHelpers";
 
 export const exactCountTasks: ExpansionTaskDefinition[] = [
   {
