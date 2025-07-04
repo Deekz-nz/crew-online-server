@@ -1,12 +1,10 @@
-import { CardColor } from "../rooms/schema/CrewTypes";
+import { CardColor, type Trick } from "../rooms/schema/CrewTypes";
 import { ExpansionTaskDefinition, TaskState } from "./types";
-import { getExpectedTrickCount, getNumPlayers } from "./taskHelpers";
-import type { Trick } from "../rooms/schema/CrewTypes";
-
-function getPlayerCard(trick: Trick, playerId: string) {
-  const idx = trick.playerOrder.indexOf(playerId);
-  return idx >= 0 ? trick.playedCards[idx] : undefined;
-}
+import {
+  getExpectedTrickCount,
+  getNumPlayers,
+  getPlayerCard,
+} from "./taskHelpers";
 
 function evaluateWinWithNumber(
   tricks: Trick[],

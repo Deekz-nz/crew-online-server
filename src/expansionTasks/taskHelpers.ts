@@ -1,4 +1,4 @@
-import { CardColor, Trick } from "../rooms/schema/CrewTypes";
+import { CardColor, Trick, Card } from "../rooms/schema/CrewTypes";
 import { TaskState } from "./types";
 
 export function getExpectedTrickCount(numPlayers: number): number {
@@ -104,6 +104,72 @@ export function evaluateExactNumberCount(
       }
     }
     return TaskState.COMPLETED;
+  }
+
+  return TaskState.IN_PROGRESS;
+}
+
+export function getPlayerCard(trick: Trick, playerId: string): Card | undefined {
+  const idx = trick.playerOrder.indexOf(playerId);
+  return idx >= 0 ? trick.playedCards[idx] : undefined;
+}
+
+export function evaluateCollectCards(
+  tricks: Trick[],
+  playerId: string,
+  cards: { color: CardColor; number: number }[]
+): TaskState {
+  const found: Record<string, boolean> = {};
+  cards.forEach(c => {
+    found[`${c.color}_${c.number}`] = false;
+  });
+
+  for (const trick of tricks) {
+    for (const card of trick.playedCards) {
+      for (const req of cards) {
+        if (card.color === req.color && card.number === req.number) {
+          if (trick.trickWinner === playerId) {
+            found[`${req.color}_${req.number}`] = true;
+          } else {
+            return TaskState.FAILED;
+          }
+        }
+      }
+    }
+  }
+
+  const allFound = Object.values(found).every(v => v);
+  return allFound ? TaskState.COMPLETED : TaskState.IN_PROGRESS;
+}
+
+export function evaluateExactConsecutiveWins(
+  tricks: Trick[],
+  playerId: string,
+  required: number
+): TaskState {
+  const numPlayers = getNumPlayers(tricks);
+  const expected = getExpectedTrickCount(numPlayers);
+
+  let wins = 0;
+  let current = 0;
+  let best = 0;
+  for (const trick of tricks) {
+    if (trick.trickWinner === playerId) {
+      wins++;
+      current++;
+      if (current > best) best = current;
+    } else {
+      current = 0;
+    }
+
+    if (wins > required) return TaskState.FAILED;
+    if (wins === required && best < required) return TaskState.FAILED;
+  }
+
+  if (tricks.length === expected) {
+    return wins === required && best === required
+      ? TaskState.COMPLETED
+      : TaskState.FAILED;
   }
 
   return TaskState.IN_PROGRESS;
