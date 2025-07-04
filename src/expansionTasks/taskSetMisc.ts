@@ -251,7 +251,7 @@ export const miscTasks: ExpansionTaskDefinition[] = [
   },
   {
     id: "avoid_leading_pink_yellow_blue",
-    displayName: "Never Lead Pink/Yellow/Blue",
+    displayName: "Never Lead Pink, Yellow or Blue",
     description: "NOT open a trick with a pink OR a yellow OR a blue card",
     difficultyFor3: 4,
     difficultyFor4: 3,
