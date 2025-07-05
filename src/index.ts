@@ -8,6 +8,11 @@
  *
  * See: https://docs.colyseus.io/server/api/#constructor-options
  */
+
+import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/node-postgres';
+const db = drizzle(process.env.DATABASE_URL!);
+
 import { listen } from "@colyseus/tools";
 
 // Import Colyseus config
@@ -15,3 +20,4 @@ import app from "./app.config";
 
 // Create and listen on 2567 (or PORT environment variable.)
 listen(app);
+
