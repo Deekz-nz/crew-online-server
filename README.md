@@ -50,6 +50,32 @@ a room:
 client.joinById(roomId, { displayName: "My Name" });
 ```
 
+## The Database
+
+Run the below to start the database
+
+```bash
+docker-compose up -d
+```
+
+Include the below in your .env file for local development
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/crew
+```
+
+You can manually seed the database (after making changes to schema.ts) using:
+
+```bash
+npx drizzle-kit push
+```
+
+Or to make the changes as part of the migration files, use:
+
+```bash
+npx drizzle-kit generate # create migration files
+npx drizzle-kit migrate # apply migrations
+```
 
 ## License
 

@@ -11,11 +11,17 @@
 
 import 'dotenv/config';
 import './db/connection';
-
-import { listen } from "@colyseus/tools";
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 
 // Import Colyseus config
 import app from "./app.config";
+import { db } from './db/connection';
+
+
+// run only in non-local environments if needed
+migrate(db, { migrationsFolder: './drizzle' });
+
+import { listen } from "@colyseus/tools";
 
 // Create and listen on 2567 (or PORT environment variable.)
 listen(app);
