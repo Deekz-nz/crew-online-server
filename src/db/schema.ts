@@ -1,10 +1,26 @@
-// TODO: Create table for highscores in here - see example below.
+import {
+  pgTable,
+  serial,
+  timestamp,
+  jsonb,
+  boolean,
+  integer,
+} from "drizzle-orm/pg-core";
+import { InferInsertModel, InferSelectModel } from "drizzle-orm";
 
-// import { integer, pgTable, varchar } from "drizzle-orm/pg-core";
+/**
+ * Table storing completed expansion games that resulted in a high score.
+ */
+export const highScoresTable = pgTable("high_scores", {
+  id: serial("id").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: false, mode: "date" })
+    .notNull()
+    .defaultNow(),
+  players: jsonb("players").notNull().$type<string[]>(),
+  undoUsed: boolean("undo_used").notNull(),
+  tasks: jsonb("tasks").notNull().$type<{ displayName: string; player: string }[]>(),
+  difficulty: integer("difficulty").notNull(),
+});
 
-// export const usersTable = pgTable("users", {
-//   id: integer().primaryKey().generatedAlwaysAsIdentity(),
-//   name: varchar({ length: 255 }).notNull(),
-//   age: integer().notNull(),
-//   email: varchar({ length: 255 }).notNull().unique(),
-// });
+export type HighScore = InferSelectModel<typeof highScoresTable>;
+export type NewHighScore = InferInsertModel<typeof highScoresTable>;

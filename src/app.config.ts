@@ -7,6 +7,7 @@ import { matchMaker } from "colyseus";
  * Import your Room files
  */
 import { CrewRoom } from "./rooms/CrewRoom";
+import { getHighScores, generateRandomHighScore, addHighScore } from "./db/highscores";
 
 export default config({
 
@@ -35,6 +36,29 @@ export default config({
             } catch (err) {
                 console.error("failed to get available rooms", err);
                 res.status(500).json({ error: "failed_to_fetch_rooms" });
+            }
+        });
+
+        // Return saved high scores ordered by difficulty
+        app.get("/highscores", async (_req, res) => {
+            try {
+                const scores = await getHighScores();
+                res.json(scores);
+            } catch (err) {
+                console.error("failed to get highscores", err);
+                res.status(500).json({ error: "failed_to_fetch_highscores" });
+            }
+        });
+
+        // Create a random high score entry (for testing)
+        app.post("/highscores/random", async (_req, res) => {
+            try {
+                const record = generateRandomHighScore();
+                await addHighScore(record);
+                res.json(record);
+            } catch (err) {
+                console.error("failed to generate highscore", err);
+                res.status(500).json({ error: "failed_to_create_highscore" });
             }
         });
 
