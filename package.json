@@ -25,9 +25,11 @@
     "@colyseus/testing": "^0.16.0",
     "@types/express": "^4.17.1",
     "@types/mocha": "^10.0.1",
+    "@types/pg": "^8.15.4",
+    "drizzle-kit": "^0.31.4",
     "mocha": "^10.2.0",
     "rimraf": "^5.0.0",
-    "tsx": "^4.10.2",
+    "tsx": "^4.20.3",
     "typescript": "^5.0.4"
   },
   "dependencies": {
@@ -35,6 +37,9 @@
     "@colyseus/playground": "^0.16.0",
     "@colyseus/tools": "^0.16.0",
     "colyseus": "^0.16.0",
-    "express": "^4.18.2"
+    "dotenv": "^17.0.1",
+    "drizzle-orm": "^0.44.2",
+    "express": "^4.18.2",
+    "pg": "^8.16.3"
   }
 }
