@@ -7,6 +7,7 @@ import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 import { CrewGameState } from "./schema/CrewRoomState";
 import { BaseTask, Card, CardColor, CommunicationRank, ExpansionTask, GameStage, Player, PlayerHistory, SimpleTask, Trick,  } from "./schema/CrewTypes";
 import { getExpansionTaskDefinitionById, selectExpansionTasks, TaskState } from "../expansionTasks";
+import { addHighScoreFromState } from "../db/highscores";
 
 
 interface JoinOptions {
@@ -370,6 +371,9 @@ export class CrewRoom extends Room<CrewGameState> {
         player.communicationCard = card;
       }
 
+      // Mark that at least one undo occurred during the game
+      this.state.undoUsed = true;
+
       this.state.currentPlayer = client.sessionId;
 
       if (trick.playedCards.length === 0) {
@@ -412,9 +416,13 @@ export class CrewRoom extends Room<CrewGameState> {
         
         // Set success flag
         this.state.gameSucceeded = allTasksCompleted && noTasksFailed;
-        
+
         console.log("Game finished. Success:", this.state.gameSucceeded);
-    
+
+        if (this.state.gameSucceeded && this.state.playExpansion) {
+          addHighScoreFromState(this.state);
+        }
+
       } else {
         // More tricks to play: reset for next trick
         this.state.currentTrick = new Trick();

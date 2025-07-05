@@ -25,5 +25,8 @@ export class CrewGameState extends Schema {
   @type("boolean") gameSucceeded: boolean = false;
   @type("string") currentGameStage: GameStage = GameStage.NotStarted;
 
+  // Track if any undo was used during the game
+  @type("boolean") undoUsed: boolean = false;
+
   @type({ map: PlayerHistory }) historyPlayerStats = new MapSchema<PlayerHistory>();
 }
