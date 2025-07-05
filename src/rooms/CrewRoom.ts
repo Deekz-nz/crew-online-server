@@ -28,6 +28,8 @@ interface GameSetupInstructions {
 export class CrewRoom extends Room<CrewGameState> {
   private lastActivityTimestamp: number;
   private inactivityInterval: NodeJS.Timeout;
+  /** keep track of client IP addresses for debugging disconnects */
+  private clientIpMap = new Map<string, string>();
   maxClients = 5;
 
   onCreate(options: any) {
@@ -512,20 +514,27 @@ export class CrewRoom extends Room<CrewGameState> {
   onAuth(client: Client, options: any, request: any) {
     const token = options.token;  // Get token from client
     const expectedSecret = process.env.SHARED_SECRET;
-  
+
     if (token !== expectedSecret) {
       throw new Error("Unauthorized");
     }
-  
+
+    // Capture IP for later disconnect logging
+    const ip = (request.headers["x-forwarded-for"] || request.socket?.remoteAddress) as string | undefined;
+    if (ip) {
+      this.clientIpMap.set(client.sessionId, ip);
+    }
+
     return true;
   }
 
   onJoin(client: Client, options: JoinOptions) {
     let player = this.state.players.get(client.sessionId);
-  
+
     if (player) {
       // Reconnecting player
-      console.log(`Player ${player.displayName} reconnected`);
+      const ip = this.clientIpMap.get(client.sessionId);
+      console.log(`Player ${player.displayName} reconnected from IP ${ip}`);
       player.isConnected = true;
       this.updateActivity();
       return;
@@ -543,7 +552,8 @@ export class CrewRoom extends Room<CrewGameState> {
     const playerCount = this.state.players.size + 1;
     player.displayName = options.displayName || "Player " + playerCount.toString();
 
-    console.log("User (", player.displayName, ") just joined room: ", this.roomId);
+    const ip = this.clientIpMap.get(client.sessionId);
+    console.log(`User (${player.displayName}) joined room ${this.roomId} from IP ${ip}`);
   
     if (this.state.players.size === 0) {
       player.isHost = true;
@@ -556,7 +566,13 @@ export class CrewRoom extends Room<CrewGameState> {
   onLeave(client: Client, consented: boolean) {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-  
+
+    const ip = this.clientIpMap.get(client.sessionId);
+    const reason = consented ? "client_left" : "connection_lost";
+    console.log(
+      `Player ${player.displayName} (session ${client.sessionId}, ip ${ip}) disconnected (${reason})`
+    );
+
     const wasHost = player.isHost;
     player.intendsToCommunicate = false;
   
@@ -569,12 +585,12 @@ export class CrewRoom extends Room<CrewGameState> {
     } else {
       // Player disconnected unexpectedly (e.g., network drop)
       const RECONNECT_TIMEOUT = 300; // seconds
-  
+
       this.allowReconnection(client, RECONNECT_TIMEOUT).then(() => {
-        console.log(`Player ${player.displayName} reconnected`);
+        console.log(`Player ${player.displayName} (ip ${ip}) reconnected`);
         player.isConnected = true;
       }).catch(() => {
-        console.log(`Player ${player.displayName} failed to reconnect in time`);
+        console.log(`Player ${player.displayName} (ip ${ip}) failed to reconnect in time`);
         this.removePlayer(client.sessionId, wasHost);
       });
     }
@@ -582,7 +598,9 @@ export class CrewRoom extends Room<CrewGameState> {
 
     // Helper to remove player and reassign host if needed
   private removePlayer(sessionId: string, wasHost: boolean) {
+    console.log(`Removing player ${sessionId} from room ${this.roomId}`);
     this.state.players.delete(sessionId);
+    this.clientIpMap.delete(sessionId);
 
     const index = this.state.playerOrder.indexOf(sessionId);
     if (index !== -1) {
@@ -594,6 +612,7 @@ export class CrewRoom extends Room<CrewGameState> {
       const newHost = this.state.players.get(firstKey);
       if (newHost) {
         newHost.isHost = true;
+        console.log(`New host is ${newHost.displayName}`);
       }
     }
   }
