@@ -21,6 +21,9 @@ export async function addHighScoreFromState(state: CrewGameState): Promise<void>
     return {
       displayName: task.displayName,
       player: state.players.get(task.player)?.displayName || '',
+      taskId: task.taskId,
+      evaluationDescription: task.evaluationDescription,
+      difficulty: task.difficulty,
     };
   });
 
@@ -64,10 +67,22 @@ export async function addRandomHighScore(): Promise<HighScore | null> {
   }
 
   const taskCount = Math.floor(Math.random() * 4) + 1;
-  const tasks: { displayName: string; player: string }[] = [];
+  const tasks: {
+    displayName: string;
+    player: string;
+    taskId: string;
+    evaluationDescription: string;
+    difficulty: number;
+  }[] = [];
   for (let i = 0; i < taskCount; i++) {
     const player = players[Math.floor(Math.random() * players.length)];
-    tasks.push({ displayName: `Task ${i + 1}`, player });
+    tasks.push({
+      displayName: `Task ${i + 1}`,
+      player,
+      taskId: `task-${i + 1}`,
+      evaluationDescription: `Evaluation ${i + 1}`,
+      difficulty: Math.floor(Math.random() * 3) + 1,
+    });
   }
 
   const record: NewHighScore = {
@@ -75,7 +90,7 @@ export async function addRandomHighScore(): Promise<HighScore | null> {
     players,
     undoUsed: Math.random() < 0.5,
     tasks,
-    difficulty: tasks.length,
+    difficulty: tasks.reduce((sum, t) => sum + t.difficulty, 0),
   };
 
   const [result] = await db!.insert(highScoresTable).values(record).returning();
