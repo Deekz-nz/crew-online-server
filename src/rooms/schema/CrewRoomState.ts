@@ -7,6 +7,7 @@ export class CrewGameState extends Schema {
   @type("boolean") gameStarted: boolean = false;
 
   @type("boolean") playExpansion: boolean = false;
+  @type("number") expansionDifficulty: number = 0;
 
   @type({ map: Player }) players = new MapSchema<Player>();
   @type(["string"]) playerOrder = new ArraySchema<string>();

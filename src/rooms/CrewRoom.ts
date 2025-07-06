@@ -635,6 +635,7 @@ export class CrewRoom extends Room<CrewGameState> {
     this.state.gameStarted = true;
 
     this.state.playExpansion = gameSetupInstructions.useExpansion;
+    this.state.expansionDifficulty = gameSetupInstructions.difficultyScore;
     // Create and shuffle the deck
     const deck = this.generateDeck();
     this.shuffle(deck);
