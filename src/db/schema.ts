@@ -18,7 +18,13 @@ export const highScoresTable = pgTable("high_scores", {
     .defaultNow(),
   players: jsonb("players").notNull().$type<string[]>(),
   undoUsed: boolean("undo_used").notNull(),
-  tasks: jsonb("tasks").notNull().$type<{ displayName: string; player: string }[]>(),
+  tasks: jsonb("tasks").notNull().$type<{
+    displayName: string;
+    player: string;
+    taskId: string;
+    evaluationDescription: string;
+    difficulty: number;
+  }[]>(),
   difficulty: integer("difficulty").notNull(),
 });
 
