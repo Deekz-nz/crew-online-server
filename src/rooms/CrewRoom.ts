@@ -1072,6 +1072,7 @@ export class CrewRoom extends Room<CrewGameState> {
     this.state.gameFinished = false;
     this.state.gameSucceeded = false;
     this.state.currentGameStage = GameStage.NotStarted;
+    this.state.undoUsed = false;
   }
   
   
