@@ -82,6 +82,32 @@ export class CrewRoom extends Room<CrewGameState> {
 
     })
 
+    // GameStage = NotStarted
+    this.onMessage("kick_player", (client, targetSessionId: string) => {
+      // Only allow kicking before the game starts
+      if (this.state.currentGameStage !== GameStage.NotStarted) return;
+
+      const requestingPlayer = this.state.players.get(client.sessionId);
+      if (!requestingPlayer?.isHost) return; // only host can kick
+
+      this.updateActivity();
+
+      const targetClient = this.clients.find((c) => c.sessionId === targetSessionId);
+      if (targetClient) {
+        // notify the kicked client and disconnect
+        targetClient.send("kicked", {});
+        targetClient.leave();
+
+        // remove from state immediately so remaining players get updated
+        const kickedPlayer = this.state.players.get(targetSessionId);
+        if (kickedPlayer) {
+          const wasHost = kickedPlayer.isHost;
+          kickedPlayer.isConnected = false;
+          this.removePlayer(targetSessionId, wasHost);
+        }
+      }
+    })
+
     // GameStage = GameSetup
     this.onMessage("register_interest_in_task", (client, taskData: BaseTask) => {
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
