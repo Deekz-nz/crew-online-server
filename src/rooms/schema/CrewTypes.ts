@@ -1,4 +1,5 @@
-import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
+import { Schema, type, ArraySchema } from "@colyseus/schema";
+import { BasePlayer } from "./SharedSchemas";
 
 // === Enums and Types ===
 export enum CardColor {
@@ -63,18 +64,13 @@ export class ExpansionTask extends BaseTask {
 }
 
 // === Define Player ===
-export class Player extends Schema {
-  @type("string") sessionId!: string;
+export class Player extends BasePlayer {
   @type([Card]) hand = new ArraySchema<Card>();
-  @type("string") displayName: string;
 
   @type("boolean") hasCommunicated: boolean = false;
   @type(Card) communicationCard: Card;
   @type("string") communicationRank: CommunicationRank;
   @type("boolean") intendsToCommunicate: boolean = false;
-
-  @type("boolean") isHost: boolean = false;
-  @type("boolean") isConnected: boolean = true;
 }
 
 // === Define Trick ===
