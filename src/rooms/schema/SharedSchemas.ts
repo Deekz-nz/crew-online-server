@@ -1,4 +1,4 @@
-import { Schema, type, MapSchema } from "@colyseus/schema";
+import { Schema, type } from "@colyseus/schema";
 
 export class BasePlayer extends Schema {
   @type("string") sessionId!: string;
@@ -12,6 +12,4 @@ export class BaseRoomState extends Schema {
   @type("string") roomCode: string = "";
   @type("string") gameType: string = "";
   @type("number") createdAt: number = Date.now();
-
-  @type({ map: BasePlayer }) players = new MapSchema<BasePlayer>();
 }
