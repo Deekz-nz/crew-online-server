@@ -8,6 +8,7 @@ import { CrewGameState } from "./schema/CrewRoomState";
 import { BaseTask, Card, CardColor, CommunicationRank, ExpansionTask, GameStage, Player, PlayerHistory, SimpleTask, Trick,  } from "./schema/CrewTypes";
 import { getExpansionTaskDefinitionById, selectExpansionTasks, TaskState } from "../expansionTasks";
 import { addHighScoreFromState } from "../db/highscores";
+import { RoomMessage } from "../shared/messages";
 
 
 interface JoinOptions {
@@ -53,7 +54,7 @@ export class CrewRoom extends Room<CrewGameState> {
 
         // Notify clients BEFORE disconnecting
         // TODO: Implement frontend handling of this message
-        this.broadcast("room_closed", { reason: "inactivity_timeout" });
+        this.broadcast(RoomMessage.ROOM_CLOSED, { reason: "inactivity_timeout" });
 
         setTimeout(() => {  
             this.disconnect();
@@ -83,7 +84,7 @@ export class CrewRoom extends Room<CrewGameState> {
     })
 
     // GameStage = NotStarted
-    this.onMessage("kick_player", (client, targetSessionId: string) => {
+    this.onMessage(RoomMessage.KICK_PLAYER, (client, targetSessionId: string) => {
       // Only allow kicking before the game starts
       if (this.state.currentGameStage !== GameStage.NotStarted) return;
 
@@ -95,7 +96,7 @@ export class CrewRoom extends Room<CrewGameState> {
       const targetClient = this.clients.find((c) => c.sessionId === targetSessionId);
       if (targetClient) {
         // notify the kicked client and disconnect
-        targetClient.send("kicked", {});
+        targetClient.send(RoomMessage.KICKED, {});
         targetClient.leave();
 
         // remove from state immediately so remaining players get updated
@@ -500,7 +501,7 @@ export class CrewRoom extends Room<CrewGameState> {
       player.intendsToCommunicate = false;
     });
 
-    this.onMessage("restart_game", (client) => {
+    this.onMessage(RoomMessage.RESTART_GAME, (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.isHost) return; // Only host can restart
     
@@ -521,7 +522,7 @@ export class CrewRoom extends Room<CrewGameState> {
     /* ================================================================
       "Send Emoji" handler
       --------------------------------------------------------------- */
-    this.onMessage("send_emoji", (client, emoji: string) => {
+    this.onMessage(RoomMessage.SEND_EMOJI, (client, emoji: string) => {
       if (typeof emoji !== "string" || emoji.trim().length === 0) return;
 
       this.updateActivity();
@@ -535,7 +536,7 @@ export class CrewRoom extends Room<CrewGameState> {
       };
 
       // broadcast to everyone (including the sender)
-      this.broadcast("player_emoji", payload);
+      this.broadcast(RoomMessage.PLAYER_EMOJI, payload);
     });
 
   }
