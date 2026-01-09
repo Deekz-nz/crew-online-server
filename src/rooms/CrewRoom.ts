@@ -3,12 +3,13 @@
 */
 // File: src/rooms/CrewRoom.ts
 import { Room, Client } from "colyseus";
-import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
+import { MapSchema, ArraySchema } from "@colyseus/schema";
 import { CrewGameState } from "./schema/CrewRoomState";
 import { BaseTask, Card, CardColor, CommunicationRank, ExpansionTask, GameStage, Player, PlayerHistory, SimpleTask, Trick,  } from "./schema/CrewTypes";
 import { getExpansionTaskDefinitionById, selectExpansionTasks, TaskState } from "../expansionTasks";
 import { addHighScoreFromState } from "../db/highscores";
 import { RoomMessage } from "../shared/messages";
+import { PresenceConfig, handleAuth, handleDispose, handleJoin, handleLeave, installPresenceHandlers, updateActivity } from "./shared/presence";
 
 
 interface JoinOptions {
@@ -27,11 +28,19 @@ interface GameSetupInstructions {
   difficultyScore: number;
   startingTasks?: string[];
 }
+
+function createCrewPresenceConfig(): PresenceConfig<Player, CrewGameState> {
+  return {
+    createPlayer: () => new Player(),
+    canJoin: (room) => room.state.gameStarted !== true,
+    onPlayerDisconnected: (player) => {
+      player.intendsToCommunicate = false;
+    },
+    canKick: (room) => room.state.currentGameStage === GameStage.NotStarted,
+    getDisplayName: (room, sessionId) => room.state.players.get(sessionId)?.displayName ?? "Unknown",
+  };
+}
 export class CrewRoom extends Room<CrewGameState> {
-  private lastActivityTimestamp: number;
-  private inactivityInterval: NodeJS.Timeout;
-  /** keep track of client IP addresses for debugging disconnects */
-  private clientIpMap = new Map<string, string>();
   maxClients = 5;
 
   onCreate(options: any) {
@@ -44,23 +53,7 @@ export class CrewRoom extends Room<CrewGameState> {
     }
 
     console.log("Created room with id: ", this.roomId);
-    // Set interval to check for inactivity
-    const TIMEOUT_MINUTES = 10;
-    const TIMEOUT_DURATION = TIMEOUT_MINUTES * 60 * 1000; // 10 minutes
-    this.inactivityInterval = setInterval(() => {
-      const now = Date.now();
-      if (now - this.lastActivityTimestamp > TIMEOUT_DURATION) {
-        console.log("Room inactive for 10 minutes. Disposing...");
-
-        // Notify clients BEFORE disconnecting
-        // TODO: Implement frontend handling of this message
-        this.broadcast(RoomMessage.ROOM_CLOSED, { reason: "inactivity_timeout" });
-
-        setTimeout(() => {  
-            this.disconnect();
-        }, 1000); // delay to allow message delivery 
-      }
-    }, 60 * 1000); // Check every minute
+    installPresenceHandlers(this, createCrewPresenceConfig());
 
     // GameStage = NotStarted
     this.onMessage("start_game", (client, gameSetupInstructions: GameSetupInstructions) => {
@@ -76,37 +69,11 @@ export class CrewRoom extends Room<CrewGameState> {
       if (!player?.isHost) return;
 
       // Update inactive timer
-      this.updateActivity();
+      updateActivity(this);
 
       // Start the game
       this.startGame(gameSetupInstructions);
 
-    })
-
-    // GameStage = NotStarted
-    this.onMessage(RoomMessage.KICK_PLAYER, (client, targetSessionId: string) => {
-      // Only allow kicking before the game starts
-      if (this.state.currentGameStage !== GameStage.NotStarted) return;
-
-      const requestingPlayer = this.state.players.get(client.sessionId);
-      if (!requestingPlayer?.isHost) return; // only host can kick
-
-      this.updateActivity();
-
-      const targetClient = this.clients.find((c) => c.sessionId === targetSessionId);
-      if (targetClient) {
-        // notify the kicked client and disconnect
-        targetClient.send(RoomMessage.KICKED, {});
-        targetClient.leave();
-
-        // remove from state immediately so remaining players get updated
-        const kickedPlayer = this.state.players.get(targetSessionId);
-        if (kickedPlayer) {
-          const wasHost = kickedPlayer.isHost;
-          kickedPlayer.isConnected = false;
-          this.removePlayer(targetSessionId, wasHost);
-        }
-      }
     })
 
     // GameStage = GameSetup
@@ -116,7 +83,7 @@ export class CrewRoom extends Room<CrewGameState> {
       const task = this.state.allTasks.find(t => this.isSameTask(t, taskData));
       if (!task || !isExpansionTask(task)) return; // bail out if not an ExpansionTask
 
-      this.updateActivity();
+      updateActivity(this);
 
       // don’t add the same player twice
       if (!task.interestedPlayers.includes(client.sessionId)) {
@@ -131,7 +98,7 @@ export class CrewRoom extends Room<CrewGameState> {
       const task = this.state.allTasks.find(t => this.isSameTask(t, taskData));
       if (!task || !isExpansionTask(task)) return; // nothing to do
 
-      this.updateActivity();
+      updateActivity(this);
 
       const idx = task.interestedPlayers.findIndex(id => id === client.sessionId);
       if (idx !== -1) {
@@ -150,7 +117,7 @@ export class CrewRoom extends Room<CrewGameState> {
       if (task.player !== "") return;
       
       // Update inactive timer
-      this.updateActivity();
+      updateActivity(this);
     
       // Assign task to player
       task.player = client.sessionId;
@@ -168,7 +135,7 @@ export class CrewRoom extends Room<CrewGameState> {
       if (task.player !== client.sessionId) return;
     
       // Update inactive timer
-      this.updateActivity();
+      updateActivity(this);
 
       // Return task
       task.player = "";
@@ -177,14 +144,14 @@ export class CrewRoom extends Room<CrewGameState> {
 
     // GameStage = GameSetup
     this.onMessage("finish_task_allocation", (client) => {
-      this.updateActivity();
+      updateActivity(this);
       if (this.state.currentGameStage !== GameStage.GameSetup) return;
     
       const unassignedTasks = this.state.allTasks.filter(task => task.player === "");
       if (unassignedTasks.length > 0) return; // Not all tasks taken
     
       // Update inactive timer
-      this.updateActivity();
+      updateActivity(this);
 
       // Save player hands & tasks
       for (const [playerId, player] of this.state.players.entries()) {
@@ -250,7 +217,7 @@ export class CrewRoom extends Room<CrewGameState> {
 
     // GameStage = TrickStart or TrickMiddle
     this.onMessage("play_card", (client, cardData: { color: CardColor; number: number }) => {
-      this.updateActivity();
+      updateActivity(this);
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
 
@@ -294,7 +261,7 @@ export class CrewRoom extends Room<CrewGameState> {
       const trick = this.state.currentTrick;
       
       // Update inactive timer
-      this.updateActivity();
+      updateActivity(this);
 
       if (this.state.currentGameStage === GameStage.TrickStart) {
         // === First card of the trick ===  
@@ -419,7 +386,7 @@ export class CrewRoom extends Room<CrewGameState> {
       if (!player || this.state.currentPlayer !== client.sessionId) return;
 
       // Update inactive timer
-      this.updateActivity();
+      updateActivity(this);
       
       const tricksPlayed = this.state.completedTricks.length;
 
@@ -462,14 +429,14 @@ export class CrewRoom extends Room<CrewGameState> {
     this.onMessage("intend_communication", (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
-      this.updateActivity();
+      updateActivity(this);
       player.intendsToCommunicate = true;
     });
 
     this.onMessage("cancel_intention", (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
-      this.updateActivity();
+      updateActivity(this);
       player.intendsToCommunicate = false;
     });
 
@@ -487,7 +454,7 @@ export class CrewRoom extends Room<CrewGameState> {
       if (!this.isValidCommunication(player, details.card, details.cardRank)) return;
     
       // Update inactive timer
-      this.updateActivity();
+      updateActivity(this);
 
       // Convert plain object to Card schema
       const schemaCard = new Card();
@@ -519,142 +486,22 @@ export class CrewRoom extends Room<CrewGameState> {
       this.state.currentGameStage = GameStage.GameEnd;
     });
 
-    /* ================================================================
-      "Send Emoji" handler
-      --------------------------------------------------------------- */
-    this.onMessage(RoomMessage.SEND_EMOJI, (client, emoji: string) => {
-      if (typeof emoji !== "string" || emoji.trim().length === 0) return;
-
-      this.updateActivity();
-
-      // prepare the payload
-      const payload = {
-        from: client.sessionId,                 // sender’s unique id
-        name: getPlayerDisplayName(this.state, client.sessionId),
-        emoji,                                  // raw string the client sent
-        sentAt: Date.now(),                     // useful for animations / ordering
-      };
-
-      // broadcast to everyone (including the sender)
-      this.broadcast(RoomMessage.PLAYER_EMOJI, payload);
-    });
-
-  }
-
-  // Helper method for inactivity
-  updateActivity() {
-    this.lastActivityTimestamp = Date.now();
   }
 
   onAuth(client: Client, options: any, request: any) {
-    const token = options.token;  // Get token from client
-    const expectedSecret = process.env.SHARED_SECRET;
-
-    if (token !== expectedSecret) {
-      throw new Error("Unauthorized");
-    }
-
-    // Capture IP for later disconnect logging
-    const ip = (request.headers["x-forwarded-for"] || request.socket?.remoteAddress) as string | undefined;
-    if (ip) {
-      this.clientIpMap.set(client.sessionId, ip);
-    }
-
-    return true;
+    return handleAuth(this, client, options, request);
   }
 
   onJoin(client: Client, options: JoinOptions) {
-    let player = this.state.players.get(client.sessionId);
-
-    if (player) {
-      // Reconnecting player
-      const ip = this.clientIpMap.get(client.sessionId);
-      console.log(`Player ${player.displayName} reconnected from IP ${ip}`);
-      player.isConnected = true;
-      this.updateActivity();
-      return;
-    }
-
-    // Game has started - don't let anyone join
-    // TODO: Let them join as a spectator
-    if (this.state.gameStarted === true) return;
-  
-    this.updateActivity();
-    player = new Player();
-    player.sessionId = client.sessionId;
-
-    // Get current player count for a fallback display name
-    const playerCount = this.state.players.size + 1;
-    player.displayName = options.displayName || "Player " + playerCount.toString();
-
-    const ip = this.clientIpMap.get(client.sessionId);
-    console.log(`User (${player.displayName}) joined room ${this.roomId} from IP ${ip}`);
-  
-    if (this.state.players.size === 0) {
-      player.isHost = true;
-    }
-    this.state.players.set(client.sessionId, player);
-    this.state.playerOrder.push(client.sessionId);
-    
+    handleJoin(this, client, options, createCrewPresenceConfig());
   }
 
   onLeave(client: Client, consented: boolean) {
-    const player = this.state.players.get(client.sessionId);
-    if (!player) return;
-
-    const ip = this.clientIpMap.get(client.sessionId);
-    const reason = consented ? "client_left" : "connection_lost";
-    console.log(
-      `Player ${player.displayName} (session ${client.sessionId}, ip ${ip}) disconnected (${reason})`
-    );
-
-    const wasHost = player.isHost;
-    player.intendsToCommunicate = false;
-  
-    // Mark as disconnected — notify clients via schema
-    player.isConnected = false;
-  
-    if (consented) {
-      // Player left intentionally (closed tab, etc.)
-      this.removePlayer(client.sessionId, wasHost);
-    } else {
-      // Player disconnected unexpectedly (e.g., network drop)
-      const RECONNECT_TIMEOUT = 300; // seconds
-
-      this.allowReconnection(client, RECONNECT_TIMEOUT).then(() => {
-        console.log(`Player ${player.displayName} (ip ${ip}) reconnected`);
-        player.isConnected = true;
-      }).catch(() => {
-        console.log(`Player ${player.displayName} (ip ${ip}) failed to reconnect in time`);
-        this.removePlayer(client.sessionId, wasHost);
-      });
-    }
-  }
-
-    // Helper to remove player and reassign host if needed
-  private removePlayer(sessionId: string, wasHost: boolean) {
-    console.log(`Removing player ${sessionId} from room ${this.roomId}`);
-    this.state.players.delete(sessionId);
-    this.clientIpMap.delete(sessionId);
-
-    const index = this.state.playerOrder.indexOf(sessionId);
-    if (index !== -1) {
-      this.state.playerOrder.splice(index, 1);
-    }
-
-    if (wasHost && this.state.players.size > 0) {
-      const firstKey = this.state.players.keys().next().value;
-      const newHost = this.state.players.get(firstKey);
-      if (newHost) {
-        newHost.isHost = true;
-        console.log(`New host is ${newHost.displayName}`);
-      }
-    }
+    handleLeave(this, client, consented, createCrewPresenceConfig());
   }
 
   onDispose() {
-    clearInterval(this.inactivityInterval);
-    console.log("Room disposed, id: ", this.roomId);
+    handleDispose(this);
   }
 
   startGame(gameSetupInstructions: GameSetupInstructions) {
@@ -1107,9 +954,4 @@ export class CrewRoom extends Room<CrewGameState> {
 
 function isExpansionTask(task: BaseTask): task is ExpansionTask {
   return (task as ExpansionTask).displayName !== undefined;
-}
-
-function getPlayerDisplayName(state: CrewGameState, sessionId: string): string {
-  // adapt to your actual player map / schema
-  return state.players.get(sessionId)?.displayName ?? "Unknown";
 }
