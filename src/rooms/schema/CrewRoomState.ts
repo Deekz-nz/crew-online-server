@@ -1,10 +1,10 @@
-import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
+import { type, MapSchema, ArraySchema } from "@colyseus/schema";
+import { BaseRoomState } from "./SharedSchemas";
 import { BaseTask, Card, GameStage, Player, PlayerHistory, SimpleTask, Trick } from "./CrewTypes";
 
 // === Define Room State ===
-export class CrewGameState extends Schema {
+export class CrewGameState extends BaseRoomState {
   @type("string") gameHost!: string;
-  @type("boolean") gameStarted: boolean = false;
 
   @type("boolean") playExpansion: boolean = false;
   @type("number") expansionDifficulty: number = 0;
