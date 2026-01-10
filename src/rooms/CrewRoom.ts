@@ -24,7 +24,7 @@ interface GameSetupInstructions {
   startingTasks?: string[];
 }
 
-export class CrewRoom extends BaseRoom<CrewGameState> {
+export class CrewRoom extends BaseRoom<Player, CrewGameState> {
   maxClients = 5;
 
   protected createInitialState() {

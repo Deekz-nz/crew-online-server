@@ -88,19 +88,19 @@ export interface BaseRoomConfig<
   inactivityCheckIntervalMs?: number;
 }
 
-type PlayerTypeFromState<TState> = TState extends BaseRoomState<infer PlayerType>
-  ? PlayerType
-  : BaseRoomPlayer;
 
 /**
  * BaseRoom implements the Colyseus lifecycle so game rooms do not need to.
  * It also installs standard messages that apply to every room.
  */
-export abstract class BaseRoom<TState extends BaseRoomState> extends Room<TState> {
+export abstract class BaseRoom<
+  TPlayer extends BaseRoomPlayer,
+  TState extends BaseRoomState<TPlayer>
+> extends Room<TState> {
   private lastActivityTimestamp?: number;
   private inactivityInterval?: NodeJS.Timeout;
   private clientIpMap = new Map<string, string>();
-  private roomConfig!: BaseRoomConfig<PlayerTypeFromState<TState>, TState>;
+  private roomConfig!: BaseRoomConfig<TPlayer, TState>;
 
   /**
    * Game rooms must provide their state instance here.
@@ -118,7 +118,7 @@ export abstract class BaseRoom<TState extends BaseRoomState> extends Room<TState
    * Optional override for presence rules. By default, only createPlayer is
    * required, while other rules fall back to sensible defaults.
    */
-  protected configureRoom(): BaseRoomConfig<PlayerTypeFromState<TState>, TState> {
+  protected configureRoom(): BaseRoomConfig<TPlayer, TState> {
     return {
       createPlayer: () => {
         throw new Error("configureRoom() must provide createPlayer()");
